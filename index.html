@@ -387,16 +387,30 @@
 
     <script src="script.js"></script>
 
+    <div id="update-banner" style="display: none; position: fixed; top: 20px; left: 50%; transform: translateX(-50%); background: #c0c0c0; color: #0a0a0a; padding: 12px 24px; border-radius: 8px; z-index: 9999; font-weight: 900; box-shadow: 0 10px 30px rgba(0,0,0,0.8); cursor: pointer; text-transform: uppercase; font-size: 0.75rem; text-align: center; white-space: nowrap;" onclick="window.location.reload(true)">
+        Обновление доступно. Нажмите для установки
+    </div>
+
     <script>
+        // Регистрация Service Worker и проверка обновлений
         if ('serviceWorker' in navigator) {
-            window.addEventListener('load', () => {
-                navigator.serviceWorker.register('/sw.js')
-                    .then(registration => {
-                        console.log('Магия PWA работает! ServiceWorker зарегистрирован.');
-                    })
-                    .catch(err => {
-                        console.log('Ошибка установки PWA:', err);
+            window.addEventListener('load', async () => {
+                try {
+                    const reg = await navigator.serviceWorker.register('/sw.js');
+                    
+                    // Слушаем появление новой версии файла sw.js на сервере
+                    reg.addEventListener('updatefound', () => {
+                        const newWorker = reg.installing;
+                        newWorker.addEventListener('statechange', () => {
+                            // Когда новый код полностью скачан в фоне и готов к работе
+                            if (newWorker.state === 'installed' && navigator.serviceWorker.controller) {
+                                document.getElementById('update-banner').style.display = 'block';
+                            }
+                        });
                     });
+                } catch (err) {
+                    console.error('Ошибка установки PWA:', err);
+                }
             });
         }
     </script>

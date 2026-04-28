@@ -8,7 +8,7 @@ let idleSpinId = null;
 let isIdleSpinning = false;
 
 /**
- * Функция медленного вращения в фоне
+ * Функция медленного вращения в фоне (Умная версия)
  */
 function startIdleSpin() {
     if (isIdleSpinning) return;
@@ -16,9 +16,22 @@ function startIdleSpin() {
 
     function idleLoop() {
         if (!isIdleSpinning) return;
-        wheelAngle -= 0.004; // Отрицательное значение крутит ПРОТИВ часовой стрелки
-        if (wheelAngle < 0) wheelAngle += Math.PI * 2;
-        drawWheel();
+
+        // 1. Проверяем, открыто ли модальное окно
+        const modal = document.getElementById('movie-modal');
+        const isModalOpen = modal && modal.style.display === 'block';
+
+        // 2. Проверяем, видна ли рулетка вообще
+        const canvas = document.getElementById('wheelCanvas');
+        const isCanvasVisible = canvas && canvas.offsetParent !== null;
+
+        // Крутим и рисуем ТОЛЬКО если на рулетку смотрят и нет открытых окон
+        if (isCanvasVisible && !isModalOpen) {
+            wheelAngle -= 0.004; // Отрицательное значение крутит ПРОТИВ часовой стрелки
+            if (wheelAngle < 0) wheelAngle += Math.PI * 2;
+            if (typeof drawWheel === 'function') drawWheel();
+        }
+
         idleSpinId = requestAnimationFrame(idleLoop);
     }
     idleLoop();
@@ -115,7 +128,7 @@ function drawWheel() {
 }
 
 /**
- * Вспомогательная функция для отрисовки секторов колеса
+ * Вспомогательная функция для отрисовки секторов колеса (МАКСИМАЛЬНАЯ ПРОИЗВОДИТЕЛЬНОСТЬ)
  */
 function renderSectors(ctx, centerX, centerY, radius, sliceAngle, angleOffset, opacity) {
     const lineGradient = ctx.createRadialGradient(centerX, centerY, radius * 0.2, centerX, centerY, radius);
@@ -125,6 +138,7 @@ function renderSectors(ctx, centerX, centerY, radius, sliceAngle, angleOffset, o
     let closestIndex = -1;
     let minDistance = Infinity;
 
+    // Находим активный элемент (в линзе)
     currentRouletteMovies.forEach((_, i) => {
         const angle = angleOffset + i * sliceAngle;
         const midAngle = angle + sliceAngle / 2;
@@ -142,57 +156,64 @@ function renderSectors(ctx, centerX, centerY, radius, sliceAngle, angleOffset, o
         const angle = angleOffset + i * sliceAngle;
         const midAngle = angle + sliceAngle / 2;
 
-        ctx.save(); 
-
         let currentOpacity = opacity;
 
         if (eliminationAnim.active && i === eliminationAnim.index) {
-            ctx.translate(eliminationAnim.progress * 250, 0); 
-            currentOpacity = opacity * (1 - eliminationAnim.progress); 
+            currentOpacity = opacity * (1 - eliminationAnim.progress);
         }
 
         ctx.globalAlpha = currentOpacity;
 
+        // 1. Рисуем фон сектора
         ctx.fillStyle = (i % 2 === 0) ? `rgba(255, 255, 255, 0.02)` : `rgba(255, 255, 255, 0.015)`;
         ctx.beginPath();
         ctx.moveTo(centerX, centerY);
         ctx.arc(centerX, centerY, radius, angle, angle + sliceAngle);
         ctx.fill();
 
+        // 2. Рисуем границы
         ctx.strokeStyle = lineGradient;
         ctx.lineWidth = 1;
         ctx.stroke();
 
-        // ЭФФЕКТ ЛУПЫ
-        ctx.save();
-        ctx.translate(centerX, centerY);
-        ctx.rotate(midAngle);
-        ctx.textAlign = "right";
-
+        // === ОПТИМИЗАЦИЯ ТЕКСТА ===
         let normMid = midAngle % (Math.PI * 2);
         if (normMid < 0) normMid += Math.PI * 2;
-        const distanceToLens = Math.min(normMid, Math.PI * 2 - normMid);
+        
+        // Если фильмов больше 60, рисуем текст ТОЛЬКО на правой стороне, чтобы не грузить ПК
+        const isRightSide = normMid < Math.PI / 1.5 || normMid > (Math.PI * 1.3);
+        
+        if (currentRouletteMovies.length < 60 || isRightSide) {
+            ctx.save();
+            ctx.translate(centerX, centerY);
+            
+            // Анимация выбывания
+            if (eliminationAnim.active && i === eliminationAnim.index) {
+                ctx.translate(eliminationAnim.progress * 250, 0); 
+            }
+            
+            ctx.rotate(midAngle);
+            ctx.textAlign = "right";
 
-        const isActive = (i === closestIndex) && (distanceToLens < 0.2);
+            const isActive = (i === closestIndex) && (minDistance < 0.2);
 
-        if (isActive) {
-            ctx.shadowBlur = 15;
-            ctx.shadowColor = 'rgba(255, 255, 255, 0.8)';
-            ctx.fillStyle = `rgba(255, 255, 255, ${currentOpacity})`;
-            ctx.font = `800 ${Math.max(14, radius / 18)}px 'Segoe UI', sans-serif`;
-        } else {
-            ctx.shadowBlur = 0;
-            ctx.fillStyle = `rgba(140, 140, 140, ${currentOpacity})`;
-            ctx.font = `500 ${Math.max(11, radius / 26)}px 'Segoe UI', sans-serif`;
+            if (isActive) {
+                // УБРАЛИ shadowBlur (убийца FPS). Делаем текст чисто белым и жирным
+                ctx.fillStyle = `rgba(255, 255, 255, ${currentOpacity})`;
+                ctx.font = `900 ${Math.max(14, radius / 18)}px 'Segoe UI', sans-serif`;
+            } else {
+                ctx.fillStyle = `rgba(140, 140, 140, ${currentOpacity})`;
+                ctx.font = `500 ${Math.max(11, radius / 26)}px 'Segoe UI', sans-serif`;
+            }
+
+            const shortTitle = movie.title.length > 22 ? movie.title.substring(0, 19) + '...' : movie.title;
+            ctx.fillText(shortTitle, radius - 35, 5);
+            ctx.restore();
         }
-
-        const shortTitle = movie.title.length > 22 ? movie.title.substring(0, 19) + '...' : movie.title;
-        ctx.fillText(shortTitle, radius - 35, 5);
-        ctx.restore();
-        ctx.restore(); 
     });
 
     // Дырка в центре
+    ctx.globalAlpha = 1;
     ctx.beginPath();
     ctx.arc(centerX, centerY, 40, 0, Math.PI * 2);
     ctx.fillStyle = '#0a0a0a'; 
@@ -259,9 +280,7 @@ function spinRoulette() {
         const size = canvas.parentElement.offsetWidth;
         ctx.clearRect(0, 0, size, size);
 
-        if (delta > 0.05) {
-            renderSectors(ctx, size/2, size/2, size/2 - 30, sliceAngle, wheelAngle - delta * 0.5, 0.4);
-        }
+        // ОПТИМИЗАЦИЯ: Убрали двойной рендер (псевдо-размытие), который вешал систему
         renderSectors(ctx, size/2, size/2, size/2 - 30, sliceAngle, wheelAngle, 1);
 
         if (progress < 1) {
