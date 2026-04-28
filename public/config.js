@@ -37,3 +37,10 @@ var currentRadarView = 'both';
 var allUsersData = {};
 var currentMainView = 'movies'; // Для переключателя коллекций
 var currentStatusFilter = 'all'; // Для таблеток статуса
+
+var allUsersData = {};
+var currentMainView = 'movies'; // Для переключателя коллекций
+var currentStatusFilter = 'all'; // Для таблеток статуса
+
+// Переменные для бесконечного скролла
+var moviesRenderedCount = 0;
