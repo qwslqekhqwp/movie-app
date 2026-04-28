@@ -3,41 +3,67 @@
 // Сборка HTML для карточек, модальных окон, статистики и коллекций
 // ==========================================
 
+// --- МАГИЯ БЕСКОНЕЧНОГО СКРОЛЛА ---
+// Создаем "наблюдателя", который сработает за 400px до того, как пользователь докрутит до конца
+const scrollObserver = new IntersectionObserver((entries) => {
+    if (entries[0].isIntersecting) {
+        loadMoreMovies();
+    }
+}, { rootMargin: "400px" }); 
+
 /**
- * Отображает фильмы в виде сетки карточек
- * Добавляет анимацию появления и интерактивность
- * @param {array} movies - Массив фильмов для отображения
+ * Подготавливает сетку к отрисовке и запускает первую порцию (30 шт.)
+ * @param {array} movies - Отфильтрованный массив фильмов
  */
 function renderMovies(movies) {
+    filteredMovies = movies; // Запоминаем текущий отфильтрованный список
+    moviesRenderedCount = 0; // Обнуляем счетчик
+    
     const grid = document.getElementById('movie-grid'); 
     grid.innerHTML = ''; 
     
-    // Создаем виртуальный фрагмент (он живет только в памяти)
+    loadMoreMovies(); // Рисуем первую партию
+    
+    // Включаем слежку за концом списка
+    const anchor = document.getElementById('scroll-anchor');
+    if (anchor) scrollObserver.observe(anchor);
+}
+
+/**
+ * Дорисовывает следующие 30 карточек (срабатывает при скролле)
+ */
+function loadMoreMovies() {
+    // Если нарисовали всё - отключаем радар
+    if (moviesRenderedCount >= filteredMovies.length) {
+        const anchor = document.getElementById('scroll-anchor');
+        if (anchor) scrollObserver.unobserve(anchor);
+        return;
+    }
+
+    const grid = document.getElementById('movie-grid');
     const fragment = document.createDocumentFragment();
     
-    movies.forEach((m, index) => {
+    // Берем срез (от текущего количества + 30 штук)
+    const nextBatch = filteredMovies.slice(moviesRenderedCount, moviesRenderedCount + 30);
+    
+    nextBatch.forEach((m, index) => {
         const r = calculateRating(m);
 
-        // Проверяем: если СУММА всех оценок человека больше 0, значит он оценивал
         const hasMe = (Number(m.plot_me || 0) + Number(m.ending_me || 0) + Number(m.actors_me || 0) + Number(m.reviewability_me || 0) + Number(m.atmosphere_me || 0) + Number(m.music_me || 0)) > 0;
         const hasAny = (Number(m.plot_any || 0) + Number(m.ending_any || 0) + Number(m.actors_any || 0) + Number(m.reviewability_any || 0) + Number(m.atmosphere_any || 0) + Number(m.music_any || 0)) > 0;
 
-        // Определяем стиль плашки рейтинга в зависимости от того, кто оценил
         let badgeStyle = "";
         if (hasMe && hasAny) {
-            badgeStyle = "background-color: #c0c0c0; color: #111;";  // Оба оценили
+            badgeStyle = "background-color: #c0c0c0; color: #111;";  
         } else if (hasMe || hasAny) {
-            badgeStyle = "background: linear-gradient(90deg, #c0c0c0 50%, rgba(40, 40, 40, 0.9) 50%); color: #fff; border: none;";  // Оценил только один
+            badgeStyle = "background: linear-gradient(90deg, #c0c0c0 50%, rgba(40, 40, 40, 0.9) 50%); color: #fff; border: none;";  
         } else {
-            badgeStyle = "background-color: #1a1a1a; color: #555;";  // Никто не оценил
+            badgeStyle = "background-color: #1a1a1a; color: #555;";  
         }
 
         const dateToShow = m.updated_at || m.created_at;
-        // Плашка "Просмотрено" показывается только для общих фильмов или ВАШИХ соло-фильмов
-       // --- ЛОГИКА ЕДИНОЙ СТЕКЛЯННОЙ ПЛАШКИ ---
 
         let movieBadgeHTML = '';
-
         if (m.status === 'Просмотрено' && (m.view_type === 'both' || m.view_type === currentRole)) {
             movieBadgeHTML = `<div class="glass-badge"><span>✓</span> ПРОСМОТРЕНО</div>`;
         } else if (m.status === 'Просмотрено' && m.view_type !== 'both' && m.view_type !== currentRole && m.view_type !== 'guest') {
@@ -50,11 +76,9 @@ function renderMovies(movies) {
         } else if (m.status === 'Не просмотрено') {
             movieBadgeHTML = `<div class="glass-badge"><span>✕</span> НЕ ПРОСМОТРЕНО</div>`;
         } else if (m.status === 'СМОТРИМ СЕЙЧАС') {
-            // НОВЫЙ БЛОК ДЛЯ АКТИВНОГО ФИЛЬМА
             movieBadgeHTML = `<div class="glass-badge" style="border-color: #ff3333; color: #ff3333;"><span class="nw-pulse" style="display:inline-block; width:6px; height:6px; margin-right:4px;"></span> СМОТРИМ</div>`;
         }
         
-        // Кнопка быстрого добавления в рулетку (Только для ПК)
         let quickRouletteBtn = '';
         if (m.status !== 'Просмотрено') {
             const isRoulette = m.status === 'В колесе';
@@ -63,7 +87,8 @@ function renderMovies(movies) {
 
         const card = document.createElement('div');
         card.className = 'card';
-        card.style.animationDelay = `${index * 0.05}s`;
+        // Каскадная анимация только для первых 30 элементов, чтобы при скролле не было скачков
+        card.style.animationDelay = moviesRenderedCount === 0 ? `${index * 0.05}s` : '0s'; 
         card.onclick = () => openModalById(m.id);
         
         card.innerHTML = `
@@ -91,12 +116,11 @@ function renderMovies(movies) {
                 <div class="card-date">Обновлено: ${formatDate(dateToShow)}</div>
             </div>`;
             
-        // Добавляем карточку в виртуальный фрагмент, а не сразу на экран
         fragment.appendChild(card);
     });
     
-    // Вставляем все 100 карточек за 1 раз!
     grid.appendChild(fragment);
+    moviesRenderedCount += 30; // Увеличиваем счетчик
 }
 
 /**
