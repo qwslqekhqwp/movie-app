@@ -163,33 +163,64 @@ function logout() {
 function setStatusFilter(status) {
     currentStatusFilter = status;
     
-    // Меняем активную таблетку
+    // Сбрасываем выпадающие списки жанров и режиссеров при смене вкладки
+    const genreFilter = document.getElementById('filter-genre');
+    const prodFilter = document.getElementById('filter-producer');
+    if (genreFilter) genreFilter.value = "";
+    if (prodFilter) prodFilter.value = "";
+
+    // Меняем активную таблетку (подсветку)
     document.querySelectorAll('.status-pill').forEach(btn => btn.classList.remove('active'));
-    event.target.classList.add('active');
+    if (window.event && window.event.target) window.event.target.classList.add('active');
     
-    // Блокируем фильтр оценок, если выбраны несмотренные фильмы
+    // Блокируем фильтр оценок, если выбраны несмотренные фильмы или рулетка
     const assessSelect = document.getElementById('filter-assessment');
-    if (status === 'roulette' || status === 'unwatched') {
-        assessSelect.value = 'all';
-        assessSelect.disabled = true;
-        assessSelect.style.opacity = '0.4';
-    } else {
-        assessSelect.disabled = false;
-        assessSelect.style.opacity = '1';
+    if (assessSelect) {
+        if (status === 'roulette' || status === 'unwatched') {
+            assessSelect.value = 'all';
+            assessSelect.disabled = true;
+            assessSelect.style.opacity = '0.4';
+        } else {
+            assessSelect.disabled = false;
+            assessSelect.style.opacity = '1';
+        }
     }
+
+    // --- УМНЫЕ ФИЛЬТРЫ ---
+    // Формируем список фильмов ТОЛЬКО для выбранной таблетки
+    const moviesForThisStatus = allMovies.filter(m => {
+        const friendRole = currentRole === 'me' ? 'any' : 'me';
+        const myScore = (Number(m[`plot_${currentRole}`] || 0) + Number(m[`ending_${currentRole}`] || 0) + Number(m[`actors_${currentRole}`] || 0) + Number(m[`reviewability_${currentRole}`] || 0) + Number(m[`atmosphere_${currentRole}`] || 0) + Number(m[`music_${currentRole}`] || 0));
+        const friendScore = (Number(m[`plot_${friendRole}`] || 0) + Number(m[`ending_${friendRole}`] || 0) + Number(m[`actors_${friendRole}`] || 0) + Number(m[`reviewability_${friendRole}`] || 0) + Number(m[`atmosphere_${friendRole}`] || 0) + Number(m[`music_${friendRole}`] || 0));
+        
+        const isViewedByMe = (m.status === 'Просмотрено' && (m.view_type === 'both' || m.view_type === currentRole)) || myScore > 0;
+        const isViewedByFriend = (m.status === 'Просмотрено' && (m.view_type === 'both' || m.view_type === friendRole)) || friendScore > 0;
+
+        if (status === 'all') return true;
+        if (status === 'watched') return isViewedByMe;
+        if (status === 'unwatched') return (m.status === 'Не просмотрено') || (m.status === 'Просмотрено' && isViewedByFriend && !isViewedByMe);
+        if (status === 'roulette') return m.status === 'В колесе';
+        if (status === 'review') return m.status === 'На пересмотр';
+        return true;
+    });
+
+    // Отправляем урезанный список собирать актуальные жанры
+    updateFilterOptions(moviesForThisStatus);
     
+    // Запускаем отрисовку карточек
     applyFilters();
 }
 /**
  * Обновляет список опций в фильтрах (жанры, режиссеры) 
- * и собирает уникальные коллекции для автодополнения
+ * принимает массив фильмов moviesSource (по умолчанию все фильмы)
  */
-function updateFilterOptions() {
+function updateFilterOptions(moviesSource = allMovies) {
     const genres = new Set();
     const producers = new Set();
-    const collections = new Set(); // НОВЫЙ СЕТ ДЛЯ ФРАНШИЗ
-    
-    allMovies.forEach(m => {
+    const collections = new Set(); 
+
+    // ТЕПЕРЬ ФУНКЦИЯ ИСПОЛЬЗУЕТ ПЕРЕДАННЫЙ МАССИВ, А НЕ ВСЮ БАЗУ
+    moviesSource.forEach(m => {
         // Извлекаем жанры
         if (m.genre) {
             m.genre.split(',').forEach(g => {
@@ -216,7 +247,7 @@ function updateFilterOptions() {
     // Наполняем невидимый список для поля "Название коллекции"
     const dataList = document.getElementById('collection-list');
     if (dataList) {
-        dataList.innerHTML = ''; // Очищаем старые
+        dataList.innerHTML = ''; 
         Array.from(collections).sort().forEach(c => {
             dataList.innerHTML += `<option value="${c}">`;
         });
@@ -353,6 +384,12 @@ function applyFilters() {
     });
 
     renderMovies(filtered);
+
+    // Выводим количество найденных фильмов
+    const countElement = document.getElementById('results-count');
+    if (countElement) {
+        countElement.innerText = `Найдено: ${filtered.length}`;
+    }
     
     // Проверяем и рисуем баннер при КАЖДОМ обновлении списка
     if (typeof renderNowWatching === 'function') renderNowWatching();

@@ -25,6 +25,10 @@ body {
     line-height: 1.6;
 }
 
+.mobile-bottom-nav {
+    display: none;
+}
+
 h1 {
     text-align: center;
     color: #f0f0f0;
@@ -1795,6 +1799,14 @@ input[type="range"]::-webkit-slider-thumb {
     position: relative;
 }
 
+/* Сетка паутинки: тонкие линии, проявляются вместе с осями */
+.radar-grid polygon {
+    fill: none;
+    stroke: rgba(255, 255, 255, 0.05);
+    stroke-width: 1;
+    opacity: 0;
+    animation: fadeInAxes 0.5s ease forwards;
+}
 /* Оси радара: появляются с легким фейдом */
 .radar-axes line {
     stroke: rgba(255, 255, 255, 0.1);
@@ -1927,5 +1939,15 @@ input[type="range"]::-webkit-slider-thumb {
         border-radius: 12px;
         border: 1px solid #222;
         margin-top: 10px;
+    }
+
+    .results-count {
+        font-size: 0.65rem;
+        color: #555;
+        text-transform: uppercase;
+        letter-spacing: 2px;
+        margin-bottom: 10px;
+        font-weight: bold;
+        text-align: left;
     }
 }

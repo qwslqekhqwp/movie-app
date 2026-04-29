@@ -22,6 +22,9 @@
     <div id="preloader">
         <div class="preloader-radar">
             <svg viewBox="0 0 200 200" width="150" height="150">
+                <g class="radar-grid">
+                    <polygon points="100,84 113.86,92 113.86,108 100,116 86.14,108 86.14,92" /> <polygon points="100,68 127.71,84 127.71,116 100,132 72.29,116 72.29,84" /> <polygon points="100,52 141.57,76 141.57,124 100,148 58.43,124 58.43,76" /> <polygon points="100,36 155.42,68 155.42,132 100,164 44.58,132 44.58,68" /> </g>
+
                 <g class="radar-axes">
                     <line x1="100" y1="100" x2="100" y2="10" />
                     <line x1="100" y1="100" x2="178" y2="50" />
@@ -143,6 +146,9 @@
                 <button id="btn-view-movies" class="save-btn" style="background: #c0c0c0; color: #000;" onclick="switchMainView('movies')">ФИЛЬМЫ</button>
                 <button id="btn-view-collections" class="save-btn" style="background: #161616; color: #c0c0c0; border: 1px solid #333;" onclick="switchMainView('collections')">КОЛЛЕКЦИИ</button>
             </div>
+
+            <div id="results-count" class="results-count"></div>
+
             <input type="text" id="search-input" placeholder="Поиск фильма..." oninput="debouncedSearch()">
             
             <div class="status-pills-container">
@@ -397,7 +403,7 @@
             </div>
         </div>
         <div style="text-align:center; margin-top:30px; margin-bottom:10px; color:#444; font-size:0.5rem; letter-spacing:3px;">
-                version 4.1.0
+                version 5.0.0
         </div>
     </div>
 
