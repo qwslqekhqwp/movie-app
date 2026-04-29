@@ -138,3 +138,30 @@ function renderSkeletons() {
         `;
     }
 }
+
+/**
+ * Воспроизводит мягкий, тактильный звук клика для элементов интерфейса
+ */
+function playUIClick() {
+    try {
+        window.uiAudioCtx = window.uiAudioCtx || new (window.AudioContext || window.webkitAudioContext)();
+        if (window.uiAudioCtx.state === 'suspended') window.uiAudioCtx.resume();
+        
+        const osc = window.uiAudioCtx.createOscillator();
+        const gain = window.uiAudioCtx.createGain();
+        
+        osc.type = 'sine'; 
+        // Частота чуть ниже для мягкости (200Гц вместо 300)
+        osc.frequency.setValueAtTime(200, window.uiAudioCtx.currentTime); 
+        osc.frequency.exponentialRampToValueAtTime(80, window.uiAudioCtx.currentTime + 0.04);
+        
+        // Громкость уменьшена в 2 раза (0.01 вместо 0.02)
+        gain.gain.setValueAtTime(0.01, window.uiAudioCtx.currentTime); 
+        gain.gain.exponentialRampToValueAtTime(0.0001, window.uiAudioCtx.currentTime + 0.04);
+        
+        osc.connect(gain);
+        gain.connect(window.uiAudioCtx.destination);
+        osc.start();
+        osc.stop(window.uiAudioCtx.currentTime + 0.04);
+    } catch(e) {}
+}

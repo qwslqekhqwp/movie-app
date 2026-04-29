@@ -76,7 +76,16 @@ function loadMoreMovies() {
         } else if (m.status === 'Не просмотрено') {
             movieBadgeHTML = `<div class="glass-badge"><span>✕</span> НЕ ПРОСМОТРЕНО</div>`;
         } else if (m.status === 'СМОТРИМ СЕЙЧАС') {
-            movieBadgeHTML = `<div class="glass-badge" style="border-color: #ff3333; color: #ff3333;"><span class="nw-pulse" style="display:inline-block; width:6px; height:6px; margin-right:4px;"></span> СМОТРИМ</div>`;
+            // Проверяем, оценил ли Я этот фильм
+            const myScoreForBadge = (Number(m['plot_' + currentRole] || 0) + Number(m['ending_' + currentRole] || 0) + Number(m['actors_' + currentRole] || 0) + Number(m['reviewability_' + currentRole] || 0) + Number(m['atmosphere_' + currentRole] || 0) + Number(m['music_' + currentRole] || 0));
+
+            if (myScoreForBadge > 0) {
+                // Я оценил, друг еще нет
+                movieBadgeHTML = `<div class="glass-badge" style="border-color: #E1B22E; color: #E1B22E;">⏳ ЖДЕМ ДРУГА</div>`;
+            } else {
+                // Никто не оценил, фильм в процессе
+                movieBadgeHTML = `<div class="glass-badge" style="border-color: #ff3333; color: #ff3333;"><span class="nw-pulse" style="display:inline-block; width:6px; height:6px; margin-right:4px;"></span> СМОТРИМ</div>`;
+            }
         }
         
         let quickRouletteBtn = '';
@@ -128,16 +137,30 @@ function loadMoreMovies() {
  * Показывает информацию о фильме, ползунки оценок и поле для комментария
  * @param {object} m - Объект фильма
  */
+/**
+ * Рендерит содержимое модального окна
+ * Показывает информацию о фильме, ползунки оценок и поле для комментария
+ * @param {object} m - Объект фильма
+ */
 function renderModalContent(m) {
     const body = document.getElementById('modal-body');
     const r = calculateRating(m);
     const dateToShow = m.updated_at || m.created_at;
-    const isViewed = m.status === 'Просмотрено';
+    const myScore = (Number(m.plot_me || 0) + Number(m.ending_me || 0) + Number(m.actors_me || 0) + Number(m.reviewability_me || 0) + Number(m.atmosphere_me || 0) + Number(m.music_me || 0));
+    const friendScore = (Number(m.plot_any || 0) + Number(m.ending_any || 0) + Number(m.actors_any || 0) + Number(m.reviewability_any || 0) + Number(m.atmosphere_any || 0) + Number(m.music_any || 0));
+
+    // Вычисляем, кто видел фильм для отрисовки правильных кнопок
+    const isViewedByMe = (m.status === 'Просмотрено' && (m.view_type === 'both' || m.view_type === currentRole)) || myScore > 0;
+    const isViewedByFriend = (m.status === 'Просмотрено' && (m.view_type === 'both' || (m.view_type !== currentRole && m.view_type !== 'guest'))) || friendScore > 0;
+    const isViewedByAnyone = isViewedByMe || isViewedByFriend;
 
     body.innerHTML = `
-        <div style="display:flex; gap:20px; margin-bottom:20px; position: relative;">
-            <img src="${m.poster || ''}" style="width:120px; height:180px; object-fit:cover; border-radius:10px; border:1px solid #333;">
-            <div style="flex:1">
+        <div style="display:flex; gap:15px; margin-bottom:15px;">
+            <div style="width:110px; flex-shrink:0;">
+                <img src="${m.poster || ''}" style="width:100%; height:165px; object-fit:cover; border-radius:10px; border:1px solid #333;">
+            </div>
+
+            <div style="flex:1; min-width: 0;"> 
                 ${isEditMode ? `
                     <input type="text" id="edit-title" value="${m.title}" placeholder="Название">
                     <input type="text" id="edit-poster" value="${m.poster || ''}" placeholder="URL постера">
@@ -147,73 +170,64 @@ function renderModalContent(m) {
                     <input type="text" id="edit-producer" value="${m.producer || ''}" placeholder="Режиссер">
                     <input type="text" id="edit-actors" value="${m.actors || ''}" placeholder="Актеры">
                     <input type="text" id="edit-external-rating" value="${m.external_rating || ''}" placeholder="Рейтинг TMDB">
-                    <input type="text" id="edit-collection" list="collection-list" value="${m.collection || ''}" placeholder="Название коллекции (франшизы)" autocomplete="off">
+                    <input type="text" id="edit-collection" list="collection-list" value="${m.collection || ''}" placeholder="Название коллекции">
                     <div class="score-group">
-                        <label style="font-size: 0.7rem; color: #666; display: block; margin-bottom: 5px;">РЕЙТИНГ КИНОПОИСКА</label>
+                        <label style="font-size: 0.7rem; color: #666;">РЕЙТИНГ КИНОПОИСКА</label>
                         <input type="number" id="edit-kp-rating" value="${m.kp_rating || ''}" step="0.1" style="margin-bottom: 0;">
                     </div>
                 ` : `
-                    <h2 style="margin:0;">${m.title}</h2>
-                    <p style="color:#888; font-size:0.8rem; margin:5px 0;">${m.year || ''} • ${m.genre || ''} ${m.duration ? '• ' + m.duration + ' мин' : ''}</p>
-                    <div style="display: flex; align-items: center; gap: 8px; margin: 5px 0;">
+                    <h2 style="margin:0 0 8px 0; overflow-wrap: break-word; line-height: 1.2; font-size:1.3rem;">${m.title}</h2>
+                    <p style="color:#888; font-size:0.75rem; margin:4px 0;">${m.year || ''} • ${m.genre || ''} ${m.duration ? '• ' + m.duration + ' мин' : ''}</p>
+                    <div style="display: flex; align-items: center; gap: 8px; margin: 10px 0; flex-wrap: wrap;">
                         <span style="background: #E1B22E; color: #000; padding: 2px 5px; border-radius: 4px; font-weight: bold; font-size: 0.6rem;">TMDB</span>
-                        <span style="font-size: 0.9rem; color: #fff;">${m.external_rating || '—'}</span>
+                        <span style="font-size: 0.8rem; color: #fff;">${m.external_rating || '—'}</span>
                         <span style="background: #ef7f1a; color: #000; padding: 2px 5px; border-radius: 4px; font-weight: bold; font-size: 0.6rem;">КП</span>
-                        <span style="font-size: 0.9rem; color: #fff;">${m.kp_rating || '—'}</span>
+                        <span style="font-size: 0.8rem; color: #fff;">${m.kp_rating || '—'}</span>
                     </div>
-                    <p style="color:#666; font-size:0.7rem; margin:2px 0;">Режиссер: ${m.producer || '—'}</p>
-                    <p style="color:#666; font-size:0.7rem; margin:2px 0;">В ролях: ${m.actors || '—'}</p>
+                    <p style="color:#666; font-size:0.75rem; margin:6px 0; overflow-wrap: break-word;"><strong>Реж:</strong> ${m.producer || '—'}</p>
+                    <p style="color:#666; font-size:0.75rem; margin:6px 0; overflow-wrap: break-word;"><strong>В ролях:</strong> ${m.actors || '—'}</p>
                 `}
-
-                <div style="display: flex; gap: 10px; margin-top: 15px;">
-                    <div onclick="toggleMovieStatus()" 
-                         style="display: inline-flex; align-items: center; gap: 8px; cursor: pointer; padding: 8px 15px; border-radius: 12px; 
-                                border: 1px solid ${isViewed ? '#ccc' : '#444'}; 
-                                background: ${isViewed ? 'rgba(255, 255, 255, 0.08)' : 'transparent'}; 
-                                transition: all 0.3s ease;">
-                        <span id="status-icon" style="color: ${isViewed ? '#ccc' : '#666'}; font-size: 1.1rem;">${isViewed ? '✓' : '○'}</span>
-                        <span id="status-text" style="font-size: 0.75rem; color: ${isViewed ? '#fff' : '#888'}; font-weight: ${isViewed ? 'bold' : 'normal'}; text-transform: uppercase;">
-                            ${isViewed ? 'Просмотрено' : 'Не просмотрено'}
-                        </span>
-                    </div>
-
-                    ${!isViewed ? `
-                    <div onclick="toggleRouletteDirectly('${m.id}', true)" 
-                         style="display: inline-flex; align-items: center; gap: 8px; cursor: pointer; padding: 8px 15px; border-radius: 12px; 
-                                border: 1px solid ${m.status === 'В колесе' ? '#c0c0c0' : '#444'}; 
-                                background: ${m.status === 'В колесе' ? '#c0c0c0' : 'transparent'}; 
-                                transition: all 0.3s ease;">
-                        <span style="font-size: 1.1rem;">♤</span>
-                        <span style="font-size: 0.75rem; color: ${m.status === 'В колесе' ? '#000' : '#888'}; font-weight: bold; text-transform: uppercase;">
-                            ${m.status === 'В колесе' ? 'В колесе' : 'В рулетку'}
-                        </span>
-                    </div>
-                    ` : ''}
-                    <input type="hidden" id="edit-status" value="${m.status}">
-                </div>
-
-                ${m.view_type !== 'both' && m.view_type !== 'guest' ? `
+                
+                ${m.status === 'Просмотрено' && m.view_type !== 'both' && m.view_type !== 'guest' && !isEditMode ? `
                     ${m.view_type !== currentRole ? `
-                        <div style="background: rgba(192, 192, 192, 0.05); border: 1px dashed #333; padding: 15px; border-radius: 12px; margin: 15px 0; text-align: center;">
-                            <p style="font-size: 0.7rem; color: #888; text-transform: uppercase; margin-bottom: 10px;">Этот фильм посмотрел только ${userNicknames[m.view_type] || 'Друг'}</p>
-                            <button onclick="joinMovie()" style="background: #c0c0c0; color: #000; border: none; padding: 8px 15px; border-radius: 8px; font-weight: bold; cursor: pointer; font-size: 0.7rem; text-transform: uppercase;">
+                        <div style="background: rgba(192, 192, 192, 0.05); border: 1px dashed #333; padding: 10px; border-radius: 8px; margin-top: 10px; text-align: center;">
+                            <p style="font-size: 0.65rem; color: #888; text-transform: uppercase; margin-bottom: 8px;">Фильм посмотрел только ${userNicknames[m.view_type] || 'Друг'}</p>
+                            <button onclick="joinMovie()" style="background: #c0c0c0; color: #000; border: none; padding: 6px 12px; border-radius: 6px; font-weight: bold; cursor: pointer; font-size: 0.65rem; text-transform: uppercase;">
                                 Я тоже посмотрел!
                             </button>
                         </div>
                     ` : `
-                        <div style="margin: 15px 0; text-align: center;">
+                        <div style="margin-top: 10px;">
                             <span style="font-size: 0.6rem; color: #555; text-transform: uppercase; letter-spacing: 1px;">Это ваш соло-просмотр</span>
                         </div>
                     `}
                 ` : ''}
-
-                <br>
-                <button onclick='toggleEditMode()' style="font-size:0.6rem; background:none; border:1px solid #333; color:#555; cursor:pointer; padding:4px 8px; border-radius:4px; margin-top:10px;">
-                    ${isEditMode ? 'ОТМЕНИТЬ ПРАВКУ' : 'ИЗМЕНИТЬ ДАННЫЕ'}
-                </button>
             </div>
         </div>
 
+        <button onclick='toggleEditMode()' style="font-size:0.6rem; background:none; border:1px solid #333; color:#555; cursor:pointer; padding:6px 10px; border-radius:8px; margin-bottom:20px; width: 100%;">
+            ${isEditMode ? 'ОТМЕНИТЬ ПРАВКУ' : 'ИЗМЕНИТЬ ДАННЫЕ'}
+        </button>
+
+        <div style="display: flex; gap: 10px; margin-bottom: 25px;">
+            <div onclick="toggleMovieStatus()" 
+                 style="flex: 1; display: flex; align-items: center; justify-content: center; gap: 6px; cursor: pointer; padding: 12px; border-radius: 12px; border: 1px solid ${isViewedByMe ? '#c0c0c0' : '#333'}; background: ${isViewedByMe ? 'rgba(192,192,192,0.1)' : 'transparent'}; transition: all 0.2s;">
+                <span style="color: ${isViewedByMe ? '#fff' : '#666'}; font-size: 1.2rem;">${isViewedByMe ? '✓' : '○'}</span>
+                <span style="font-size: 0.7rem; font-weight: bold; text-transform: uppercase; color: ${isViewedByMe ? '#fff' : '#888'}; text-align: center;">
+                    ${isViewedByMe ? 'Просмотрено' : 'Не просмотрено'}
+                </span>
+            </div>
+
+            ${!isViewedByAnyone ? `
+            <div onclick="toggleRouletteDirectly('${m.id}', true)" 
+                 style="flex: 1; display: flex; align-items: center; justify-content: center; gap: 6px; cursor: pointer; padding: 12px; border-radius: 12px; border: 1px solid ${m.status === 'В колесе' ? '#c0c0c0' : '#333'}; background: ${m.status === 'В колесе' ? '#c0c0c0' : 'transparent'}; transition: all 0.2s;">
+                <span style="color: ${m.status === 'В колесе' ? '#000' : '#666'}; font-size: 1.2rem;">♤</span>
+                <span style="font-size: 0.7rem; font-weight: bold; text-transform: uppercase; color: ${m.status === 'В колесе' ? '#000' : '#888'}; text-align: center;">
+                    ${m.status === 'В колесе' ? 'В колесе' : 'В рулетку'}
+                </span>
+            </div>
+            ` : ''}
+        </div>
 
         <div class="total-score-big" style="text-align: center;">
             <h2 id="total-val">${r.total.toFixed(1)}</h2>
@@ -668,20 +682,35 @@ function renderCollections() {
 /**
  * Ищет фильм со статусом "СМОТРИМ СЕЙЧАС" и отрисовывает баннер сверху
  */
+/**
+ * Ищет фильм со статусом "СМОТРИМ СЕЙЧАС" и отрисовывает баннер сверху
+ */
 function renderNowWatching() {
     const container = document.getElementById('now-watching-container');
     if (!container) return;
 
-    // Ищем фильм с нужным статусом
-    const activeMovie = allMovies.find(m => m.status === 'СМОТРИМ СЕЙЧАС');
+    // Ищем фильм, который в статусе "СМОТРИМ", НО который текущий пользователь еще не оценил
+    const activeMovie = allMovies.find(m => {
+        if (m.status !== 'СМОТРИМ СЕЙЧАС') return false;
+        
+        // Считаем баллы именно для того, кто сейчас открыл сайт
+        const myScore = (Number(m['plot_' + currentRole] || 0) + 
+                         Number(m['ending_' + currentRole] || 0) + 
+                         Number(m['actors_' + currentRole] || 0) + 
+                         Number(m['reviewability_' + currentRole] || 0) + 
+                         Number(m['atmosphere_' + currentRole] || 0) + 
+                         Number(m['music_' + currentRole] || 0));
+                         
+        return myScore === 0; // Покажет баннер, только если оценок нет
+    });
 
-    // Если такого фильма нет - очищаем контейнер и выходим
+    // Если такого фильма нет (или ты его уже оценил) - очищаем контейнер и выходим
     if (!activeMovie) {
         container.innerHTML = '';
         return;
     }
 
-    // Если фильм есть - рисуем баннер
+    // Если фильм есть и не оценен - рисуем баннер
     container.innerHTML = `
         <div class="now-watching-banner">
             <div class="nw-info">

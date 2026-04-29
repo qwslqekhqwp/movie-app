@@ -2,6 +2,7 @@
 // 4. ЗАГРУЗКА И УПРАВЛЕНИЕ ФИЛЬМАМИ
 // ==========================================
 
+
 /**
  * Загружает все фильмы из базы данных Supabase
  * Обновляет фильтры и отображение после загрузки
@@ -10,18 +11,17 @@ async function fetchMovies() {
     renderSkeletons(); // Показываем скелеты на время загрузки
     
     try {
-       // 1. Сначала скачиваем ники и аватарки обоих пользователей
+        // 1. Сначала скачиваем ники и аватарки обоих пользователей
         const { data: users, error: userError } = await supabaseClient
             .from('users')
-            .select('role, nickname, avatar_url'); // <--- ДОБАВИЛИ avatar_url
+            .select('role, nickname, avatar_url'); 
 
         if (!userError && users) {
             users.forEach(u => {
                 userNicknames[u.role] = u.nickname;
-                allUsersData[u.role] = u; // <--- СОХРАНЯЕМ ВСЕ ДАННЫЕ В ПАМЯТЬ
+                allUsersData[u.role] = u; 
             });
             
-            // --- Динамически переименовываем фильтры ---
             const optMe = document.querySelector('#filter-assessment option[value="only_me"]');
             const optAny = document.querySelector('#filter-assessment option[value="only_any"]');
             
@@ -29,25 +29,52 @@ async function fetchMovies() {
             if (optAny) optAny.textContent = `Оценил ${userNicknames.any}`;
         }
 
-        // 2. Теперь скачиваем сами фильмы
-        const { data: movies, error: movieError } = await supabaseClient
-            .from('movies')
-            .select('*');
+        // 2. === МАГИЯ ПРЕЛОАДЕРА И ЗАГРУЗКИ БАЗЫ ===
+        // Promise.all заставляет браузер ждать выполнения ОБЕИХ задач:
+        // Задача А: Скачать фильмы
+        // Задача Б: Подождать минимум 2 секунды (2000 мс), чтобы красивая анимация радара успела отыграть
+        const [moviesResponse] = await Promise.all([
+            supabaseClient.from('movies').select('*').order('updated_at', { ascending: false }),
+            new Promise(resolve => setTimeout(resolve, 2000))
+        ]);
 
-        if (movieError) {
-            showToast("ОШИБКА ЗАГРУЗКИ ФИЛЬМОВ", "error");
-            console.error(movieError);
-            return;
+        const { data, error } = moviesResponse;
+
+        if (error) throw error;
+
+        allMovies = data || [];
+        
+        // 3. Если мы находимся в модальном окне (перезагрузка после сохранения) - обновляем его
+        if (currentMovieId) {
+            const updatedMovie = allMovies.find(m => m.id === currentMovieId);
+            if (updatedMovie) renderModalContent(updatedMovie);
         }
 
-        // 3. Сохраняем и отображаем
-        allMovies = movies;
-        updateFilterOptions();
-        applyFilters(); // Эта функция уберет скелеты и нарисует карточки
+        // 4. Применяем текущие фильтры и рисуем карточки
+        if (typeof updateFilterOptions === 'function') {
+            updateFilterOptions(); // <-- Собираем жанры и режиссеров из скачанных фильмов
+        }
+        if (typeof applyFilters === 'function') {
+            applyFilters(); 
+        }
+
+        // 5. ПРЯЧЕМ ЭКРАН ЗАГРУЗКИ
+        // Все готово, анимация отыграла. Плавно растворяем черный экран.
+        const preloader = document.getElementById('preloader');
+        if (preloader) {
+            preloader.classList.add('fade-out');
+            // Удаляем его из DOM через 600мс (время CSS-анимации), чтобы он не блокировал клики
+            setTimeout(() => preloader.style.display = 'none', 600);
+        }
 
     } catch (err) {
-        console.error("Критическая ошибка:", err);
-        showToast("СБОЙ ПРИ ЗАГРУЗКЕ", "error");
+        console.error("Ошибка загрузки:", err);
+        const grid = document.getElementById('movie-grid');
+        if (grid) grid.innerHTML = '<div style="color:#ff3333; text-align:center; width:100%; grid-column: 1/-1;">Ошибка загрузки данных. Проверьте интернет или настройки Supabase.</div>';
+        
+        // В случае ошибки тоже убираем прелоадер, чтобы показать текст ошибки
+        const preloader = document.getElementById('preloader');
+        if (preloader) preloader.style.display = 'none';
     }
 }
 
@@ -113,17 +140,23 @@ async function searchMovieData() {
 
 /**
  * Сохраняет все изменения в оценках и данных фильма
- * Обновляет базу данных и перезагружает страницу
+ * Автоматически переводит статус "СМОТРИМ СЕЙЧАС" в "Просмотрено" при наличии оценок
+ */
+/**
+ * Сохраняет все изменения в оценках и данных фильма
+ * + Встроена система слежения за изменениями для Ленты активности
  */
 async function saveRatings() {
+    const m = allMovies.find(movie => movie.id === currentMovieId);
+    if (!m) return;
+
     const updateData = { 
         review_common: document.getElementById('review-common').value, 
-        status: document.getElementById('edit-status').value,
+        status: document.getElementById('edit-status') ? document.getElementById('edit-status').value : m.status,
         updated_at: new Date().toISOString()
     };
     
     if (isEditMode) {
-        // Сохраняем данные фильма если находимся в режиме редактирования
         updateData.title = document.getElementById('edit-title').value;
         updateData.poster = document.getElementById('edit-poster').value;
         updateData.year = document.getElementById('edit-year').value;
@@ -136,14 +169,68 @@ async function saveRatings() {
         updateData.collection = document.getElementById('edit-collection') ? document.getElementById('edit-collection').value.trim() : null;
     }
     
-    // Сохраняем оценки текущего пользователя
+    // === АЛГОРИТМ СРАВНЕНИЯ ОЦЕНОК (DIFF) ===
+    let myNewScore = 0;
+    const criteriaNames = { plot: 'Сюжет', ending: 'Концовка', reviewability: 'Пересмотр', actors: 'Актеры', atmosphere: 'Атмосфера', music: 'Музыка' };
+    let changes = []; // Сюда будем складывать тексты изменений (например "сюжет с 5 на 8")
+
     ['plot', 'ending', 'reviewability', 'actors', 'atmosphere', 'music'].forEach(f => {
         const input = document.getElementById(`input-${f}_${currentRole}`);
-        if (input) updateData[`${f}_${currentRole}`] = parseInt(input.value) || 0;
+        if (input) {
+            const val = parseInt(input.value) || 0;
+            updateData[`${f}_${currentRole}`] = val;
+            myNewScore += val;
+
+            // Сравниваем старое и новое значение
+            const oldVal = Number(m[`${f}_${currentRole}`] || 0);
+            if (oldVal !== val && val > 0) {
+                if (oldVal === 0) {
+                    changes.push(`оценил ${criteriaNames[f]} на ${val}`);
+                } else {
+                    changes.push(`изменил ${criteriaNames[f]} с ${oldVal} на ${val}`);
+                }
+            }
+        }
     });
+
+    // Отправляем лог об изменении оценок (если они были)
+    if (changes.length > 0) {
+        const actionText = changes.join(', ');
+        logActivity(m.title, actionText);
+    }
+
+    // Лог изменения статуса (например, перекинул из Колеса в Просмотрено вручную)
+    if (m.status !== updateData.status && myNewScore === 0) {
+        logActivity(m.title, `Изменил статус: ${m.status} ➔ ${updateData.status}`);
+    }
+
+    // === АВТОМАТИЗАЦИЯ СТАТУСОВ (Старая логика) ===
+    if (myNewScore > 0) {
+        const friendRole = currentRole === 'me' ? 'any' : 'me';
+        const friendScore = (Number(m[`plot_${friendRole}`] || 0) + Number(m[`ending_${friendRole}`] || 0) + Number(m[`actors_${friendRole}`] || 0) + Number(m[`reviewability_${friendRole}`] || 0) + Number(m[`atmosphere_${friendRole}`] || 0) + Number(m[`music_${friendRole}`] || 0));
+
+        if (friendScore > 0) {
+            updateData.status = 'Просмотрено';
+            updateData.view_type = 'both';
+        } else {
+            if (m.status === 'СМОТРИМ СЕЙЧАС') {
+                updateData.status = 'СМОТРИМ СЕЙЧАС';
+            } else {
+                updateData.status = 'Просмотрено';
+                updateData.view_type = currentRole;
+            }
+        }
+    }
     
     const { error } = await supabaseClient.from('movies').update(updateData).eq('id', currentMovieId);
-    if (error) showToast("Ошибка сохранения", "error"); else { showToast("Сохранено!", "success"); setTimeout(() => location.reload(), 800); }
+    
+    if (error) {
+        showToast("Ошибка сохранения", "error");
+    } else {
+        showToast("Сохранено!", "success");
+        Object.assign(m, updateData);
+        setTimeout(() => location.reload(), 800);
+    }
 }
 
 /**
@@ -255,6 +342,11 @@ async function cancelWatching(id) {
 
         if (error) throw error;
 
+        if (typeof logActivity === 'function') {
+            const movie = allMovies.find(m => m.id == id);
+            if (movie) logActivity(movie.title, "Отменил просмотр (вернул в колесо)");
+        }
+
         showToast("ПРОСМОТР ОТМЕНЕН", "info");
         
         // Обновляем данные и интерфейс
@@ -267,5 +359,149 @@ async function cancelWatching(id) {
         }
     } catch (err) {
         showToast("ОШИБКА ОТМЕНЫ", "error");
+    }
+}
+
+/**
+ * Переключает статус Просмотрено / Не просмотрено с учетом соло-просмотров
+ */
+async function toggleMovieStatus() {
+    const m = allMovies.find(movie => movie.id === currentMovieId);
+    if (!m) return;
+
+    const myScore = (Number(m.plot_me || 0) + Number(m.ending_me || 0) + Number(m.actors_me || 0) + Number(m.reviewability_me || 0) + Number(m.atmosphere_me || 0) + Number(m.music_me || 0));
+    const friendScore = (Number(m.plot_any || 0) + Number(m.ending_any || 0) + Number(m.actors_any || 0) + Number(m.reviewability_any || 0) + Number(m.atmosphere_any || 0) + Number(m.music_any || 0));
+
+    const isViewedByMe = (m.status === 'Просмотрено' && (m.view_type === 'both' || m.view_type === currentRole)) || myScore > 0;
+    const isViewedByFriend = (m.status === 'Просмотрено' && (m.view_type === 'both' || (m.view_type !== currentRole && m.view_type !== 'guest'))) || friendScore > 0;
+
+    try {
+        if (isViewedByMe) {
+            // СЦЕНАРИЙ 1: Я хочу ОТМЕНИТЬ свой просмотр
+            let newStatus = 'Не просмотрено';
+            let newViewType = 'none';
+
+            // Если друг смотрел, фильм остается "Просмотрено", но только для него
+            if (isViewedByFriend) {
+                newStatus = 'Просмотрено';
+                newViewType = currentRole === 'me' ? 'any' : 'me';
+            }
+
+            const updates = {
+                status: newStatus,
+                view_type: newViewType,
+                [`plot_${currentRole}`]: 0,
+                [`ending_${currentRole}`]: 0,
+                [`actors_${currentRole}`]: 0,
+                [`reviewability_${currentRole}`]: 0,
+                [`atmosphere_${currentRole}`]: 0,
+                [`music_${currentRole}`]: 0
+            };
+
+            const { error } = await supabaseClient.from('movies').update(updates).eq('id', currentMovieId);
+            if (error) throw error;
+            Object.assign(m, updates);
+            showToast("ОТМЕТКА СНЯТА", "info");
+
+        } else {
+            // СЦЕНАРИЙ 2: Я хочу ОТМЕТИТЬ фильм (автоматически удаляет из рулетки/пересмотра)
+            let newViewType = currentRole;
+            
+            if (isViewedByFriend) {
+                newViewType = 'both';
+            }
+
+            const updates = {
+                status: 'Просмотрено', // Жестко ставим Просмотрено
+                view_type: newViewType
+            };
+
+            const { error } = await supabaseClient.from('movies').update(updates).eq('id', currentMovieId);
+            if (error) throw error;
+            Object.assign(m, updates);
+            showToast("ОТМЕЧЕНО КАК ПРОСМОТРЕННОЕ", "success");
+        }
+
+        setTimeout(() => {
+            const updatedMovie = allMovies.find(movie => movie.id === currentMovieId);
+            renderModalContent(updatedMovie);
+            if (typeof fetchMovies === 'function') fetchMovies(); 
+        }, 500);
+    } catch (err) {
+        console.error(err);
+        showToast("СБОЙ СЕТИ", "error");
+    }
+}
+
+// Установить "заряженный" фильм
+async function setRiggedMovie() {
+    const movieId = document.getElementById('admin-movie-select').value;
+    if (!movieId) return;
+
+    // Сначала сбрасываем все старые метки (на всякий случай)
+    await supabaseClient.from('movies').update({ is_rigged: false }).neq('id', 0);
+
+    // Ставим новую метку
+    const { error } = await supabaseClient.from('movies').update({ is_rigged: true }).eq('id', movieId);
+
+    if (error) {
+        showToast("Ошибка подкрутки", "error");
+    } else {
+        showToast("ФИЛЬМ ЗАРЯЖЕН НА ПОБЕДУ", "success");
+        closeAdminModal();
+        fetchMovies(); // Обновляем локальные данные
+    }
+}
+
+// Сбросить подкрутку
+async function resetRiggedMovie() {
+    const { error } = await supabaseClient.from('movies').update({ is_rigged: false }).neq('id', 0);
+    if (!error) {
+        showToast("ПОДКУТКА СБРОШЕНА", "info");
+        closeAdminModal();
+        fetchMovies();
+    }
+}
+
+// ==========================================
+// ЛЕНТА АКТИВНОСТИ
+// ==========================================
+
+/**
+ * Отправляет запись о действии в базу данных
+ */
+async function logActivity(movieTitle, actionText) {
+    // Гостей не отслеживаем
+    if (currentRole !== 'me' && currentRole !== 'any') return;
+    
+    await supabaseClient.from('activity_logs').insert([{
+        user_role: currentRole,
+        movie_title: movieTitle,
+        action_text: actionText
+    }]);
+}
+
+/**
+ * Проверяет, есть ли новые события для серебряной точки
+ */
+async function checkNewActivity() {
+    // Берем время последнего открытия ленты (или очень старую дату, если открываем впервые)
+    const lastView = localStorage.getItem('last_activity_view') || '2000-01-01T00:00:00.000Z';
+    
+    // Ищем хотя бы одну запись, которая новее этого времени и сделана НЕ нами
+    const { data, error } = await supabaseClient
+        .from('activity_logs')
+        .select('created_at')
+        .gt('created_at', lastView)
+        .neq('user_role', currentRole) 
+        .limit(1);
+
+    const dot = document.getElementById('activity-dot');
+    if (dot) {
+        if (!error && data && data.length > 0) {
+            dot.style.display = 'block'; // Зажигаем точку!
+        } else {
+            dot.style.display = 'none';
+        }
     }
 }

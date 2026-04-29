@@ -244,7 +244,29 @@ function spinRoulette() {
     const startAngle = wheelAngle;
     
     const sliceAngle = (2 * Math.PI) / currentRouletteMovies.length;
-    const winningIndex = Math.floor(Math.random() * currentRouletteMovies.length);
+    // === УМНАЯ ПОДКУТКА (Elimination mode) ===
+    let winningIndex;
+    const mode = document.getElementById('spin-mode').value;
+    
+    if (mode === 'elimination') {
+        // Ищем все фильмы, которые НЕ "заряжены"
+        const candidates = currentRouletteMovies
+            .map((m, index) => ({ ...m, originalIndex: index }))
+            .filter(m => !m.is_rigged);
+
+        // Если есть другие кандидаты кроме "заряженного", выбираем из них
+        if (candidates.length > 0) {
+            const randomCandidate = candidates[Math.floor(Math.random() * candidates.length)];
+            winningIndex = randomCandidate.originalIndex;
+        } else {
+            // Если остался только один заряженный (финал), тогда он проигрывает (но этого не случится по логике)
+            winningIndex = Math.floor(Math.random() * currentRouletteMovies.length);
+        }
+    } else {
+        // В обычном режиме просто ищем заряженный фильм и делаем его победителем сразу
+        const riggedIndex = currentRouletteMovies.findIndex(m => m.is_rigged);
+        winningIndex = riggedIndex !== -1 ? riggedIndex : Math.floor(Math.random() * currentRouletteMovies.length);
+    }
 
     let idealRemainder = (2 * Math.PI - (winningIndex * sliceAngle + sliceAngle / 2)) % (2 * Math.PI);
     if (idealRemainder < 0) idealRemainder += Math.PI * 2; 
@@ -333,8 +355,12 @@ function finalizeSpin() {
                 eliminationAnim.active = false;
 
                 if (currentRouletteMovies.length === 1) {
-                    showWinnerOverlay('ПОБЕДИТЕЛЬ', currentRouletteMovies[0].title);
-                    display.innerText = `Победитель: ${currentRouletteMovies[0].title}`;
+                    const finalWinner = currentRouletteMovies[0];
+                    // ДОБАВЛЯЕМ ОБНОВЛЕНИЕ БАЗЫ ДАННЫХ
+                    updateMovieStatusToWatching(finalWinner.id); 
+                    
+                    showWinnerOverlay('ПОБЕДИТЕЛЬ', finalWinner.title);
+                    display.innerText = `Победитель: ${finalWinner.title}`;
                     return;
                 } else {
                     display.innerText = `Выбыл: ${winner.title}. Осталось: ${currentRouletteMovies.length}`;
@@ -401,7 +427,13 @@ async function toggleRouletteDirectly(id, isModalOpen = false) {
 
     // Обновляем данные локально в браузере, чтобы не ждать перезагрузки
     movie.status = newStatus;
-    movie.previous_status = updateData.previous_status; 
+    movie.previous_status = updateData.previous_status;
+    
+    // === ЛОГ В ЛЕНТУ АКТИВНОСТИ ===
+    if (typeof logActivity === 'function') {
+        const actionText = newStatus === 'В колесе' ? "Добавил фильм в рулетку ♤" : "Убрал фильм из рулетки ✕";
+        logActivity(movie.title, actionText);
+    }
     
     showToast(newStatus === 'В колесе' ? "Добавлен в рулетку!" : "Удален из рулетки", "success");
 

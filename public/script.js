@@ -45,6 +45,8 @@ async function checkAuth() {
     } else {
         document.getElementById('auth-screen').style.display = 'flex';
     }
+    // Запускаем проверку ленты активности
+    if (typeof checkNewActivity === 'function') setTimeout(checkNewActivity, 1500);
 }
 
 /**
@@ -153,20 +155,9 @@ function logout() {
     location.reload();
 }
 
-
-
-
-
-
-
-
-
 // ==========================================
 // 6. ФИЛЬТРАЦИЯ, СОРТИРОВКА И РАСЧЕТЫ
 // ==========================================
-
-
-
 
 
 function setStatusFilter(status) {
@@ -278,26 +269,56 @@ function applyFilters() {
         const matchesGenre = !genre || (m.genre && m.genre.toLowerCase().includes(genre.toLowerCase()));
         const matchesProd = !prod || m.producer === prod;
 
-        // 1. ФИЛЬТРАЦИЯ ПО ТАБЛЕТКАМ СТАТУСОВ
+        // === УМНАЯ ПРОВЕРКА СОЛО-ПРОСМОТРОВ (ИСПРАВЛЕНО) ===
+        // Определяем роль друга динамически
+        const friendRole = currentRole === 'me' ? 'any' : 'me';
+
+        // Считаем оценки именно относительно того, кто сейчас сидит за экраном
+        const myScore = (Number(m[`plot_${currentRole}`] || 0) + Number(m[`ending_${currentRole}`] || 0) + Number(m[`actors_${currentRole}`] || 0) + Number(m[`reviewability_${currentRole}`] || 0) + Number(m[`atmosphere_${currentRole}`] || 0) + Number(m[`music_${currentRole}`] || 0));
+        const friendScore = (Number(m[`plot_${friendRole}`] || 0) + Number(m[`ending_${friendRole}`] || 0) + Number(m[`actors_${friendRole}`] || 0) + Number(m[`reviewability_${friendRole}`] || 0) + Number(m[`atmosphere_${friendRole}`] || 0) + Number(m[`music_${friendRole}`] || 0));
+
+        const isViewedByMe = (m.status === 'Просмотрено' && (m.view_type === 'both' || m.view_type === currentRole)) || myScore > 0;
+        const isViewedByFriend = (m.status === 'Просмотрено' && (m.view_type === 'both' || m.view_type === friendRole)) || friendScore > 0;
+
+        // 1. СТРОГАЯ ФИЛЬТРАЦИЯ ПО ТАБЛЕТКАМ
         let matchesStatus = true;
-        if (currentStatusFilter === 'watched') matchesStatus = (m.status === 'Просмотрено');
-        else if (currentStatusFilter === 'roulette') matchesStatus = (m.status === 'В колесе');
-        else if (currentStatusFilter === 'unwatched') matchesStatus = (m.status === 'Не просмотрено');
-        else if (currentStatusFilter === 'review') matchesStatus = (m.status === 'На пересмотр');
+        if (currentStatusFilter === 'all') {
+            matchesStatus = true;
+        } else if (currentStatusFilter === 'watched') {
+            matchesStatus = isViewedByMe; // ТОЛЬКО если я смотрел
+        } else if (currentStatusFilter === 'unwatched') { 
+            // СТРОГО "Не просмотрено" ИЛИ "Смотрел только друг"
+            matchesStatus = (m.status === 'Не просмотрено') || (m.status === 'Просмотрено' && isViewedByFriend && !isViewedByMe); 
+        } else if (currentStatusFilter === 'roulette') {
+            matchesStatus = m.status === 'В колесе';
+        } else if (currentStatusFilter === 'review') { 
+            matchesStatus = m.status === 'На пересмотр';
+        } else if (currentStatusFilter === 'watching_now') {
+            matchesStatus = m.status === 'СМОТРИМ СЕЙЧАС';
+        }
 
         // 2. ФИЛЬТРАЦИЯ ПО ОЦЕНКАМ (Только если таблетка позволяет)
         let matchesAssessment = true;
+        
+        // Переменные hasMe и hasAny оставляем жестко привязанными к ролям (для корректной работы самого выпадающего списка)
         const hasMe = (Number(m.plot_me||0) + Number(m.ending_me||0) + Number(m.actors_me||0) + Number(m.reviewability_me||0) + Number(m.atmosphere_me||0) + Number(m.music_me||0)) > 0;
         const hasAny = (Number(m.plot_any||0) + Number(m.ending_any||0) + Number(m.actors_any||0) + Number(m.reviewability_any||0) + Number(m.atmosphere_any||0) + Number(m.music_any||0)) > 0;
 
-        if (m.status === 'Просмотрено' || m.status === 'На пересмотр') {
-            if (assessment === 'all') {
-                if (m.view_type !== 'both' && m.view_type !== currentRole && currentRole !== 'guest') matchesAssessment = false;
+        // === ИСПРАВЛЕННАЯ ЛОГИКА ОЦЕНОК (Теперь работает для всех статусов без ограничений) ===
+        if (assessment === 'both') {
+            matchesAssessment = hasMe && hasAny;
+        } else if (assessment === 'only_me') {
+            matchesAssessment = hasMe && !hasAny;
+        } else if (assessment === 'only_any') {
+            matchesAssessment = !hasMe && hasAny;
+        } else if (assessment === 'none') {
+            matchesAssessment = !hasMe && !hasAny;
+        } else if (assessment === 'all') {
+            // Если выбрано "Все оценки", мы показываем всё, НО:
+            // Прячем соло-просмотры друга на главной вкладке, чтобы не засорять твой список
+            if (m.status === 'Просмотрено' && currentStatusFilter !== 'unwatched' && m.view_type !== 'both' && m.view_type !== currentRole && currentRole !== 'guest') {
+                matchesAssessment = false;
             }
-            else if (assessment === 'both') matchesAssessment = hasMe && hasAny;
-            else if (assessment === 'only_me') matchesAssessment = hasMe && !hasAny;
-            else if (assessment === 'only_any') matchesAssessment = !hasMe && hasAny;
-            else if (assessment === 'none') matchesAssessment = !hasMe && !hasAny;
         }
 
         return matchesSearch && matchesGenre && matchesProd && matchesStatus && matchesAssessment;
@@ -305,16 +326,13 @@ function applyFilters() {
 
     // Сортировка результатов
     filtered.sort((a, b) => {
-        // === НОВАЯ ЛОГИКА: VIP-статус для фильма "СМОТРИМ СЕЙЧАС" ===
-        // Он ВСЕГДА будет на самом верху, независимо от других сортировок
+        // VIP-статус для фильма "СМОТРИМ СЕЙЧАС" (всегда наверху)
         if (a.status === 'СМОТРИМ СЕЙЧАС' && b.status !== 'СМОТРИМ СЕЙЧАС') return -1;
         if (b.status === 'СМОТРИМ СЕЙЧАС' && a.status !== 'СМОТРИМ СЕЙЧАС') return 1;
 
-        // 1. Сначала проверяем стандартные сортировки
         if (sort === 'rating-desc') return calculateRating(b).total - calculateRating(a).total;
         if (sort === 'title-asc') return a.title.localeCompare(b.title);
         
-        // 2. "Самые спорные" 
         if (sort === 'controversial') {
             const rA = calculateRating(a);
             const rB = calculateRating(b);
@@ -323,7 +341,6 @@ function applyFilters() {
             return diffB - diffA; 
         }
 
-        // 3. "Наибольшее согласие"
         if (sort === 'agreed') {
             const rA = calculateRating(a);
             const rB = calculateRating(b);
@@ -332,13 +349,12 @@ function applyFilters() {
             return diffA - diffB; 
         }
 
-        // 4. Если ничего не выбрано, сортируем по дате обновления
         return new Date(b.updated_at || b.created_at) - new Date(a.updated_at || a.created_at);
     });
 
     renderMovies(filtered);
     
-    // === НОВАЯ ЛОГИКА: Проверяем и рисуем баннер при КАЖДОМ обновлении списка ===
+    // Проверяем и рисуем баннер при КАЖДОМ обновлении списка
     if (typeof renderNowWatching === 'function') renderNowWatching();
 }
 
@@ -406,39 +422,79 @@ function closeModal() {
 
 
 /**
- * Переключает статус просмотра фильма (Просмотрено/Не просмотрено)
- * Анимирует изменение UI элементов
+ * Переключает статус Просмотрено / Не просмотрено с учетом соло-просмотров
  */
-function toggleMovieStatus() {
-    const statusInput = document.getElementById('edit-status');
-    const statusIcon = document.getElementById('status-icon');
-    const statusText = document.getElementById('status-text');
-    const toggleBtn = document.getElementById('status-toggle');
+async function toggleMovieStatus() {
+    const m = allMovies.find(movie => movie.id === currentMovieId);
+    if (!m) return;
 
-    // Анимация иконки
-    statusIcon.style.transform = 'rotate(360deg) scale(1.2)';
-    setTimeout(() => { statusIcon.style.transform = 'rotate(0deg) scale(1)'; }, 300);
+    // Считаем суммы оценок, чтобы понять, кто реально оценивал
+    const myScore = (Number(m.plot_me || 0) + Number(m.ending_me || 0) + Number(m.actors_me || 0) + Number(m.reviewability_me || 0) + Number(m.atmosphere_me || 0) + Number(m.music_me || 0));
+    const friendScore = (Number(m.plot_any || 0) + Number(m.ending_any || 0) + Number(m.actors_any || 0) + Number(m.reviewability_any || 0) + Number(m.atmosphere_any || 0) + Number(m.music_any || 0));
 
-    if (statusInput.value === 'Просмотрено') {
-        statusInput.value = 'Не просмотрено';
-        statusIcon.innerText = '○';
-        statusIcon.style.color = '#666';
-        statusText.innerText = 'Не просмотрено';
-        statusText.style.color = '#888';
-        statusText.style.fontWeight = 'normal';
-        toggleBtn.style.borderColor = '#444';
-        toggleBtn.style.background = 'transparent';
-        toggleBtn.style.boxShadow = 'none';
-    } else {
-        statusInput.value = 'Просмотрено';
-        statusIcon.innerText = '✓';
-        statusIcon.style.color = '#ccc';
-        statusText.innerText = 'Просмотрено';
-        statusText.style.color = '#fff';
-        statusText.style.fontWeight = 'bold';
-        toggleBtn.style.borderColor = '#ccc';
-        toggleBtn.style.background = 'rgba(255, 255, 255, 0.08)';
-        toggleBtn.style.boxShadow = '0 0 15px rgba(255, 255, 255, 0.05)';
+    // Умная проверка: смотрел ли каждый из нас по отдельности
+    const isViewedByMe = (m.status === 'Просмотрено' && (m.view_type === 'both' || m.view_type === currentRole)) || myScore > 0;
+    const isViewedByFriend = (m.status === 'Просмотрено' && (m.view_type === 'both' || (m.view_type !== currentRole && m.view_type !== 'guest'))) || friendScore > 0;
+
+    try {
+        if (isViewedByMe) {
+            // СЦЕНАРИЙ 1: Я смотрел, и хочу ОТМЕНИТЬ свой просмотр
+            let newStatus = 'Не просмотрено';
+            let newViewType = 'none';
+
+            // Если друг смотрел, оставляем статус "Просмотрено", но отдаем ему соло-роль
+            if (isViewedByFriend) {
+                newStatus = 'Просмотрено';
+                newViewType = currentRole === 'me' ? 'any' : 'me';
+            }
+
+            const updates = {
+                status: newStatus,
+                view_type: newViewType,
+                // Обнуляем мои оценки при отмене
+                [`plot_${currentRole}`]: 0,
+                [`ending_${currentRole}`]: 0,
+                [`actors_${currentRole}`]: 0,
+                [`reviewability_${currentRole}`]: 0,
+                [`atmosphere_${currentRole}`]: 0,
+                [`music_${currentRole}`]: 0
+            };
+
+            const { error } = await supabaseClient.from('movies').update(updates).eq('id', currentMovieId);
+            if (error) throw error;
+            Object.assign(m, updates);
+            if (typeof logActivity === 'function') logActivity(m.title, "Снял отметку 'Просмотрено' ✕");
+            showToast("ОТМЕТКА СНЯТА", "info");
+
+        } else {
+            // СЦЕНАРИЙ 2: Я НЕ смотрел, и хочу отметить
+            let newViewType = currentRole;
+            
+            // Если друг УЖЕ смотрел, то теперь мы смотрели ОБА
+            if (isViewedByFriend) {
+                newViewType = 'both';
+            }
+
+            const updates = {
+                status: 'Просмотрено',
+                view_type: newViewType
+            };
+
+            const { error } = await supabaseClient.from('movies').update(updates).eq('id', currentMovieId);
+            if (error) throw error;
+            Object.assign(m, updates);
+            if (typeof logActivity === 'function') logActivity(m.title, "Отметил как 'Просмотрено' ✓");
+            showToast("ОТМЕЧЕНО КАК ПРОСМОТРЕННОЕ", "success");
+        }
+
+        setTimeout(() => {
+            const updatedMovie = allMovies.find(movie => movie.id === currentMovieId);
+            renderModalContent(updatedMovie);
+            fetchMovies(); 
+        }, 500);
+    } catch (err) {
+        console.error(err);
+        showToast("СБОЙ СЕТИ", "error");
     }
 }
 
@@ -488,44 +544,71 @@ function toggleForm() {
     f.style.display = f.style.display === 'none' ? 'block' : 'none';
 }
 
-function toggleNewViewed() {
+// === УМНЫЕ ГАЛОЧКИ (Глобальная привязка) ===
+
+window.toggleNewViewed = function() {
     const input = document.getElementById('new-is-viewed');
     const box = document.getElementById('new-viewed-checkbox');
     const select = document.getElementById('new-status');
     
-    if (input.value === 'false') {
-        input.value = 'true';
-        box.style.color = '#000';
-        box.style.background = '#c0c0c0';
-        box.style.borderColor = '#c0c0c0';
-        select.disabled = true; // Блокируем выпадающий список
-        select.style.opacity = '0.3';
-    } else {
-        input.value = 'false';
-        box.style.color = 'transparent';
-        box.style.background = 'transparent';
-        box.style.borderColor = '#555';
-        select.disabled = false; // Разблокируем
-        select.style.opacity = '1';
-    }
-}
-
-function toggleNewSoloView() {
-    const input = document.getElementById('new-solo-view');
-    const box = document.getElementById('new-solo-checkbox');
+    // Предохранитель: если элементов нет, не ломаем скрипт
+    if (!input || !box) return; 
     
     if (input.value === 'false') {
         input.value = 'true';
         box.style.color = '#000';
         box.style.background = '#c0c0c0';
         box.style.borderColor = '#c0c0c0';
+        
+        if (select) {
+            select.disabled = true;
+            select.style.opacity = '0.3';
+        }
+    } else {
+        input.value = 'false';
+        box.style.color = 'transparent';
+        box.style.background = 'transparent';
+        box.style.borderColor = '#555';
+        
+        if (select) {
+            select.disabled = false;
+            select.style.opacity = '1';
+        }
+        
+        const soloInput = document.getElementById('new-solo-view');
+        const soloBox = document.getElementById('new-solo-checkbox');
+        if (soloInput && soloInput.value === 'true') {
+            soloInput.value = 'false';
+            soloBox.style.color = 'transparent';
+            soloBox.style.background = 'transparent';
+            soloBox.style.borderColor = '#555';
+        }
+    }
+};
+
+window.toggleNewSoloView = function() {
+    const input = document.getElementById('new-solo-view');
+    const box = document.getElementById('new-solo-checkbox');
+    
+    if (!input || !box) return;
+    
+    if (input.value === 'false') {
+        input.value = 'true';
+        box.style.color = '#000';
+        box.style.background = '#c0c0c0';
+        box.style.borderColor = '#c0c0c0';
+        
+        const viewedInput = document.getElementById('new-is-viewed');
+        if (viewedInput && viewedInput.value === 'false') {
+            window.toggleNewViewed(); // Вызываем соседнюю функцию через window
+        }
     } else {
         input.value = 'false';
         box.style.color = 'transparent';
         box.style.background = 'transparent';
         box.style.borderColor = '#555';
     }
-}
+};
 
 
 
@@ -571,6 +654,12 @@ document.getElementById('add-movie-form').addEventListener('submit', async (e) =
     };
     
     await supabaseClient.from('movies').insert([newMovie]);
+    
+    // === ЛОГ В ЛЕНТУ АКТИВНОСТИ ===
+    if (typeof logActivity === 'function') {
+        const actionText = (newMovie.status === 'В колесе') ? "Добавил новый фильм сразу в рулетку ♤" : "Добавил новый фильм в базу";
+        await logActivity(newTitle, actionText);
+    }
     location.reload();
 });
 
@@ -708,6 +797,12 @@ function updateUserProfileUI() {
     const adminPanel = document.querySelector('.admin-panel');
     if (adminPanel) {
         adminPanel.style.display = currentRole === 'guest' ? 'none' : 'block';
+    }
+
+    // Показываем корону только тебе
+    const crown = document.getElementById('admin-crown-btn');
+    if (crown) {
+        crown.style.display = (currentRole === 'me') ? 'block' : 'none';
     }
 }
 
@@ -979,3 +1074,102 @@ function closeCollectionModal() {
         modal.classList.remove('fade-out');
     }, 300);
 }
+
+// ==========================================
+// ГЛОБАЛЬНЫЕ СЛУШАТЕЛИ (script.js)
+// ==========================================
+
+// Озвучка интерфейса: ловим клики по интерактивным элементам
+document.addEventListener('click', (e) => {
+    // Список классов и тегов, которые должны "звучать"
+    const target = e.target.closest('button, .card, .glass-badge, .status-pill, .nav-btn, .quick-roulette-btn, .toast, .drum-item');
+    if (target && typeof playUIClick === 'function') {
+        playUIClick();
+    }
+});
+
+function openAdminModal() {
+    const select = document.getElementById('admin-movie-select');
+    select.innerHTML = '<option value="">-- Выберите фильм --</option>';
+    
+    // Берем только фильмы, которые сейчас в колесе
+    const wheelMovies = allMovies.filter(m => m.status === 'В колесе');
+    
+    wheelMovies.forEach(m => {
+        const isRigged = m.is_rigged ? " (ЗАРЯЖЕН)" : "";
+        select.innerHTML += `<option value="${m.id}">${m.title}${isRigged}</option>`;
+    });
+
+    document.getElementById('admin-modal').style.display = 'block';
+}
+
+function closeAdminModal() {
+    document.getElementById('admin-modal').style.display = 'none';
+}
+
+// ==========================================
+// ЛОГИКА ЛЕНТЫ АКТИВНОСТИ
+// ==========================================
+
+async function openActivityModal() {
+    const modal = document.getElementById('activity-modal');
+    const list = document.getElementById('activity-list');
+    const dot = document.getElementById('activity-dot');
+    
+    modal.style.display = 'block';
+    list.innerHTML = '<div style="text-align: center; color: #666; margin-top: 20px;">Загрузка истории...</div>';
+    
+    // Прячем серебряную точку и запоминаем время захода
+    if (dot) dot.style.display = 'none';
+    localStorage.setItem('last_activity_view', new Date().toISOString());
+
+    // Качаем последние 50 записей
+    const { data, error } = await supabaseClient
+        .from('activity_logs')
+        .select('*')
+        .order('created_at', { ascending: false })
+        .limit(50);
+
+    if (error) {
+        list.innerHTML = '<div style="color: #ff3333; text-align: center; margin-top: 20px;">Ошибка загрузки базы данных</div>';
+        return;
+    }
+
+    if (!data || data.length === 0) {
+        list.innerHTML = '<div style="text-align: center; color: #666; margin-top: 20px;">Пока нет активности. Сделайте что-нибудь!</div>';
+        return;
+    }
+
+    // Рисуем список
+    list.innerHTML = '';
+    data.forEach(log => {
+        // Форматируем дату
+        const date = new Date(log.created_at).toLocaleString('ru-RU', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' });
+        const authorName = userNicknames[log.user_role] || (log.user_role === 'me' ? 'УМНЫЙ' : 'НЕ УМНЫЙ');
+        
+        // --- Достаем аватарку ---
+        let avatarUrl = `https://ui-avatars.com/api/?name=${authorName}&background=1a1a1a&color=c0c0c0`;
+        if (typeof allUsersData !== 'undefined' && allUsersData[log.user_role] && allUsersData[log.user_role].avatar_url) {
+            avatarUrl = allUsersData[log.user_role].avatar_url;
+        }
+        
+        list.innerHTML += `
+            <div class="activity-item role-${log.user_role}">
+                <div class="act-date">${date}</div>
+                <div style="display: flex; align-items: flex-start; gap: 8px; margin-top: 5px;">
+                    <img src="${avatarUrl}" onclick="openProfileModal('${log.user_role}')" style="width: 20px; height: 20px; border-radius: 4px; object-fit: cover; border: 1px solid #444; flex-shrink: 0; margin-top: 1px; cursor: pointer; transition: border-color 0.2s;" onmouseover="this.style.borderColor='#c0c0c0'" onmouseout="this.style.borderColor='#444'" title="Открыть профиль">
+                    <div style="line-height: 1.4;">
+                        <span class="act-user" onclick="openProfileModal('${log.user_role}')" style="cursor: pointer; text-decoration: underline; text-underline-offset: 3px; transition: color 0.2s;" onmouseover="this.style.color='#fff'" onmouseout="this.style.color='inherit'" title="Открыть профиль">${authorName}</span>
+                        <span class="act-text"> • ${log.action_text}</span>
+                        <span class="act-movie">«${log.movie_title}»</span>
+                    </div>
+                </div>
+            </div>
+        `;
+    });
+}
+
+function closeActivityModal() {
+    document.getElementById('activity-modal').style.display = 'none';
+}
+

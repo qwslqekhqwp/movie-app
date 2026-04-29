@@ -1046,7 +1046,7 @@ input[type="range"]::-webkit-slider-thumb {
     }
 
     #roulette-controls > div,
-    #start-battle-btn {
+    #t-battle-btn {
         display: none !important;
     }
 
@@ -1547,23 +1547,23 @@ input[type="range"]::-webkit-slider-thumb {
 .glass-badge {
     position: absolute;
     top: 10px;
-    left: 50%;
-    transform: translateX(-50%);
+    left: 10px;    /* Привязываем к левому краю */
+    right: 10px;   /* Привязываем к правому краю */
+    width: auto;   /* Растягиваем на всю ширину между left и right */
+    transform: none; /* Убираем центрирование через transform */
     
-    /* Идентичный вид: матовое стекло */
     background: rgba(192, 192, 192, 0.2); 
     backdrop-filter: blur(8px);
     -webkit-backdrop-filter: blur(8px);
     
     color: #fff;
-    padding: 4px 12px;
+    padding: 6px 12px;
     border-radius: 8px;
     font-size: 0.6rem;
     font-weight: bold;
     text-transform: uppercase;
     letter-spacing: 1px;
     
-    /* Сплошная тонкая рамка для обеих плашек */
     border: 1px solid rgba(255, 255, 255, 0.1); 
     box-shadow: 0 4px 15px rgba(0, 0, 0, 0.5);
     
@@ -1574,7 +1574,7 @@ input[type="range"]::-webkit-slider-thumb {
     display: flex;
     align-items: center;
     justify-content: center;
-    gap: 6px; /* Отступ между иконкой и текстом */
+    gap: 6px; 
 }
 
 /* ==========================================
@@ -1712,4 +1712,119 @@ input[type="range"]::-webkit-slider-thumb {
     .nw-title {
         white-space: normal;
     }
+}
+
+#admin-crown-btn:hover {
+    transform: scale(1.2) rotate(10deg);
+    filter: drop-shadow(0 0 10px rgba(255, 255, 255, 0.5));
+}
+
+/* Специфичный стиль для списка в админке */
+#admin-movie-select option {
+    padding: 10px;
+    background: #161616;
+}
+
+/* ==========================================
+   СТИЛИ ДЛЯ ЛЕНТЫ АКТИВНОСТИ
+   ========================================== */
+@keyframes pulse-silver {
+    0% { transform: scale(0.95); box-shadow: 0 0 0 0 rgba(192, 192, 192, 0.7); }
+    70% { transform: scale(1); box-shadow: 0 0 0 6px rgba(192, 192, 192, 0); }
+    100% { transform: scale(0.95); box-shadow: 0 0 0 0 rgba(192, 192, 192, 0); }
+}
+
+#activity-log-btn:hover {
+    transform: scale(1.1);
+}
+
+/* Карточка отдельного события в ленте */
+.activity-item {
+    background: rgba(255, 255, 255, 0.03);
+    border-left: 3px solid #444;
+    padding: 12px;
+    margin-bottom: 10px;
+    border-radius: 4px;
+    font-size: 0.8rem;
+    line-height: 1.4;
+    text-align: left;
+}
+
+/* Цветные полоски слева в зависимости от того, кто сделал действие */
+.activity-item.role-me { border-left-color: #c0c0c0; } /* Твое серебро */
+.activity-item.role-any { border-left-color: #555; } /* Темно-серый для друга */
+
+.act-date { font-size: 0.65rem; color: #666; margin-bottom: 5px; }
+.act-user { font-weight: bold; text-transform: uppercase; letter-spacing: 1px; }
+.act-movie { color: #fff; font-weight: bold; margin: 0 4px; }
+.act-text { color: #aaa; }
+
+/* Кастомный скроллбар для модалки, чтобы он не выглядел страшно на ПК */
+#activity-list::-webkit-scrollbar {
+    width: 6px;
+}
+#activity-list::-webkit-scrollbar-thumb {
+    background: #333;
+    border-radius: 4px;
+}
+
+/* ==========================================
+   ЭКРАН ЗАГРУЗКИ (ПРЕЛОАДЕР)
+   ========================================== */
+#preloader {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100vw;
+    height: 100vh;
+    background: #0a0a0a;
+    z-index: 999999;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    transition: opacity 0.6s ease, visibility 0.6s ease;
+}
+
+#preloader.fade-out {
+    opacity: 0;
+    visibility: hidden;
+}
+
+/* Контейнер радара */
+.preloader-radar {
+    position: relative;
+}
+
+/* Оси радара: появляются с легким фейдом */
+.radar-axes line {
+    stroke: rgba(255, 255, 255, 0.1);
+    stroke-width: 1;
+    opacity: 0;
+    animation: fadeInAxes 0.5s ease forwards;
+}
+
+/* Сам многоугольник: отрисовка линии и заливка */
+.radar-polygon {
+    fill: rgba(192, 192, 192, 0); /* Сначала прозрачный */
+    stroke: #c0c0c0; /* Серебряная линия */
+    stroke-width: 2;
+    /* Длина контура шестиугольника примерно 480 */
+    stroke-dasharray: 480;
+    stroke-dashoffset: 480; /* Прячем линию */
+    animation: drawPolygon 1.2s cubic-bezier(0.4, 0, 0.2, 1) 0.3s forwards, 
+               fillPolygon 0.6s ease 1.5s forwards;
+    filter: drop-shadow(0 0 8px rgba(192, 192, 192, 0.3));
+}
+
+/* Ключевые кадры */
+@keyframes fadeInAxes {
+    to { opacity: 1; }
+}
+
+@keyframes drawPolygon {
+    to { stroke-dashoffset: 0; }
+}
+
+@keyframes fillPolygon {
+    to { fill: rgba(192, 192, 192, 0.15); }
 }
