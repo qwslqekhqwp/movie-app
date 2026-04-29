@@ -165,3 +165,9 @@ function playUIClick() {
         osc.stop(window.uiAudioCtx.currentTime + 0.04);
     } catch(e) {}
 }
+
+function toggleFilters() {
+    const container = document.querySelector('.filters-container');
+    const isHidden = window.getComputedStyle(container).display === 'none';
+    container.style.display = isHidden ? 'flex' : 'none';
+}

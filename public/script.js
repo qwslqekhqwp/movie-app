@@ -676,9 +676,17 @@ function switchTab(tab) {
     
     // Скрываем все экраны
     screens.forEach(id => {
+        // НОВОЕ: Если мы переключаемся на обычные вкладки, закрываем профиль (если он был открыт как вкладка)
+        const profileModal = document.getElementById('profile-modal');
+        if (profileModal && profileModal.classList.contains('is-tab')) {
+            profileModal.style.display = 'none';
+            profileModal.classList.remove('is-tab');
+        }
         const el = document.getElementById(id);
         if (el) el.style.display = 'none';
     });
+
+    
     
     // Удаляем класс active со всех кнопок
     document.querySelectorAll('.nav-btn').forEach(btn => btn.classList.remove('active'));
@@ -689,6 +697,14 @@ function switchTab(tab) {
     
     if (targetScreen) targetScreen.style.display = 'block';
     if (targetBtn) targetBtn.classList.add('active');
+
+    // --- Логика для мобильного нижнего меню ---
+    // Удаляем класс active со всех иконок
+    document.querySelectorAll('.nav-item').forEach(btn => btn.classList.remove('active'));
+    
+    // Подсвечиваем ту иконку, которую нажали
+    const mobileTargetBtn = document.getElementById(`mobile-tab-${tab}`);
+    if (mobileTargetBtn) mobileTargetBtn.classList.add('active');
 
     // Загружаем статистику при переходе на её вкладку
     if (tab === 'stats' && typeof generateStatistics === "function") {
@@ -716,18 +732,6 @@ function switchTab(tab) {
         }
     }
 }
-
-// ==========================================
-// 11. СТАТИСТИКА
-// ==========================================
-
-
-
-
-
-
-
-
 
 
 // ==========================================
@@ -799,11 +803,12 @@ function updateUserProfileUI() {
         adminPanel.style.display = currentRole === 'guest' ? 'none' : 'block';
     }
 
-    // Показываем корону только тебе
+    // Показываем корону только тебе (в обычном меню и в мобильном)
     const crown = document.getElementById('admin-crown-btn');
-    if (crown) {
-        crown.style.display = (currentRole === 'me') ? 'block' : 'none';
-    }
+    const mobileCrown = document.getElementById('mobile-admin-crown');
+    
+    if (crown) crown.style.display = (currentRole === 'me') ? 'block' : 'none';
+    if (mobileCrown) mobileCrown.style.display = (currentRole === 'me') ? 'flex' : 'none';
 }
 
 
@@ -1173,3 +1178,24 @@ function closeActivityModal() {
     document.getElementById('activity-modal').style.display = 'none';
 }
 
+// ==========================================
+// ЛОГИКА ВКЛАДКИ ПРОФИЛЯ НА МОБИЛКАХ
+// ==========================================
+window.openMobileProfileTab = function() {
+    // 1. Скрываем основные экраны (Кино, Рулетка, Итоги)
+    const screens = ['main-view', 'stats-container', 'roulette-screen'];
+    screens.forEach(id => {
+        const el = document.getElementById(id);
+        if (el) el.style.display = 'none';
+    });
+    
+    // 2. Переключаем серебряную подсветку в нижнем меню
+    document.querySelectorAll('.nav-item').forEach(btn => btn.classList.remove('active'));
+    const mobileTargetBtn = document.getElementById('mobile-tab-profile');
+    if (mobileTargetBtn) mobileTargetBtn.classList.add('active');
+
+    // 3. Открываем профиль, но вешаем на него маскировочный класс "is-tab"
+    const modal = document.getElementById('profile-modal');
+    modal.classList.add('is-tab');
+    openProfileModal('me'); // Загружаем твои данные
+};

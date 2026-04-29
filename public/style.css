@@ -1828,3 +1828,104 @@ input[type="range"]::-webkit-slider-thumb {
 @keyframes fillPolygon {
     to { fill: rgba(192, 192, 192, 0.15); }
 }
+
+/* --- МОБИЛЬНАЯ ПЕРЕСТРОЙКА (Silver & Dark) --- */
+@media (max-width: 600px) {
+    /* Скрываем старые табы сверху */
+    .nav-tabs { display: none !important; }
+
+    #mobile-filter-toggle { display: block !important; }
+    
+    /* Компактная шапка */
+    h1 { font-size: 1.1rem; margin: 10px 0; letter-spacing: 1px; }
+    #user-profile-btn { display: none !important; } /* Скрываем профиль из шапки */
+    #admin-crown-btn { display: none !important; } /* Скрываем корону из шапки */
+
+    /* Парящее нижнее меню (Telegram style) */
+    .mobile-bottom-nav {
+        display: flex;
+        position: fixed;
+        bottom: 15px; /* Поднимаем от нижнего края */
+        left: 15px; /* Отступ слева */
+        width: calc(100% - 30px); /* Ширина с учетом отступов */
+        height: 65px;
+        border-radius: 25px; /* Скругленные края */
+        background: rgba(16, 16, 16, 0.85);
+        backdrop-filter: blur(20px);
+        -webkit-backdrop-filter: blur(20px);
+        border: 1px solid rgba(255, 255, 255, 0.08);
+        box-shadow: 0 10px 30px rgba(0, 0, 0, 0.7), inset 0 1px 1px rgba(255, 255, 255, 0.1);
+        z-index: 9999;
+        justify-content: space-around;
+        align-items: center;
+        padding-bottom: 0; 
+        margin-bottom: env(safe-area-inset-bottom); /* Защита от полоски iPhone */
+    }
+
+    /* Превращаем модальное окно профиля в обычную вкладку на телефоне */
+    #profile-modal.is-tab {
+        position: relative !important;
+        background: transparent !important;
+        backdrop-filter: none !important;
+        -webkit-backdrop-filter: none !important;
+        padding-bottom: 100px; /* Место под парящее меню */
+    }
+    
+    #profile-modal.is-tab .modal-content {
+        width: 100% !important;
+        margin: 0 !important;
+        border: none !important;
+        box-shadow: none !important;
+        background: transparent !important;
+        padding: 10px !important;
+        animation: none !important;
+    }
+    
+    #profile-modal.is-tab .close-modal {
+        display: none !important; /* Скрываем крестик закрытия */
+    }
+
+    .nav-item {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        color: #666;
+        transition: 0.3s;
+        cursor: pointer;
+    }
+
+    .nav-item svg {
+        width: 24px;
+        height: 24px;
+        fill: currentColor;
+        margin-bottom: 4px;
+    }
+
+    .nav-item span {
+        font-size: 0.6rem;
+        text-transform: uppercase;
+        font-weight: bold;
+        letter-spacing: 0.5px;
+    }
+
+    /* Подсветка активной иконки (Цвет + Свечение) */
+    .nav-item.active { 
+        color: #c0c0c0; 
+        filter: drop-shadow(0 0 10px rgba(192, 192, 192, 0.8));
+    }
+
+    /* Отступ для контента, чтобы нижнее меню ничего не закрывало */
+    body { padding-bottom: 80px; }
+
+    /* Сворачивание фильтров */
+    .filters-container {
+        display: none; /* Скрываем по умолчанию на мобилках */
+        flex-direction: column;
+        gap: 5px;
+        background: #111;
+        padding: 10px;
+        border-radius: 12px;
+        border: 1px solid #222;
+        margin-top: 10px;
+    }
+}
