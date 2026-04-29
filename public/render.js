@@ -116,7 +116,7 @@ function loadMoreMovies() {
                 </div>
             </div>
 
-            <img src="${m.poster || 'https://via.placeholder.com/180x260?text=No+Poster'}" loading="lazy" alt="${m.title}">
+            <img src="${getProxyUrl(m.poster) || 'https://via.placeholder.com/180x260?text=No+Poster'}" loading="lazy" alt="${m.title}">
             <div class="card-info">
                 <div class="card-top-content">
                     <h3 style="margin: 0 0 8px 0; font-size: 0.9rem; line-height: 1.2; min-height: 2.4em; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; text-overflow: ellipsis;" title="${m.title}">${m.title}</h3>
@@ -157,7 +157,7 @@ function renderModalContent(m) {
     body.innerHTML = `
         <div style="display:flex; gap:15px; margin-bottom:15px;">
             <div style="width:110px; flex-shrink:0;">
-                <img src="${m.poster || ''}" style="width:100%; height:165px; object-fit:cover; border-radius:10px; border:1px solid #333;">
+                <img src="${getProxyUrl(m.poster) || ''}" style="width:100%; height:165px; object-fit:cover; border-radius:10px; border:1px solid #333;">
             </div>
 
             <div style="flex:1; min-width: 0;"> 
@@ -652,7 +652,7 @@ function renderCollections() {
         
         // Достаем постеры (до 3 штук для красивой стопки)
         let postersHTML = '';
-        const posters = cMovies.map(m => m.poster).filter(p => p).slice(0, 3);
+        const posters = cMovies.map(m => getProxyUrl(m.poster)).filter(p => p).slice(0, 3);
         if (posters.length === 1) postersHTML = `<img src="${posters[0]}" style="z-index: 2; width: 110px; height: 165px; transform: none;">`;
         else if (posters.length === 2) postersHTML = `<img src="${posters[0]}"><img src="${posters[1]}">`;
         else if (posters.length >= 3) postersHTML = `<img src="${posters[0]}"><img src="${posters[1]}"><img src="${posters[2]}">`;

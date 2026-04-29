@@ -429,7 +429,7 @@ function openModalById(id) {
     // --- АМБИЛАЙТ: Включаем свечение ---
     const ambilight = document.getElementById('modal-ambilight');
     if (ambilight) {
-        ambilight.style.backgroundImage = `url('${movie.poster || ''}')`;
+        ambilight.style.backgroundImage = `url('${getProxyUrl(movie.poster) || ''}')`;
         setTimeout(() => ambilight.style.opacity = '1', 50); // Небольшая задержка для плавности
     }
 }
@@ -943,7 +943,7 @@ async function openProfileModal(targetRole = currentRole) {
         myScoresData.slice(0, 3).forEach(item => {
             favMoviesContainer.innerHTML += `
                 <div style="flex: 0 0 100px; text-align: center;">
-                    <img src="${item.movie.poster || ''}" style="width: 100px; height: 150px; object-fit: cover; border-radius: 8px; border: 1px solid #333; margin-bottom: 5px;">
+                    <img src="${getProxyUrl(item.movie.poster) || ''}" style="width: 100px; height: 150px; object-fit: cover; border-radius: 8px; border: 1px solid #333; margin-bottom: 5px;">
                     <div style="font-size: 0.65rem; color: #ccc; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-weight: bold;">${item.movie.title}</div>
                     <div style="font-size: 0.8rem; color: #c0c0c0; font-weight: 900;">${item.score.toFixed(1)}</div>
                 </div>`;
@@ -1081,7 +1081,7 @@ function openCollectionModal(cName, cMovies) {
         
         card.innerHTML = `
             ${movieBadgeHTML}
-            <img src="${m.poster || 'https://via.placeholder.com/180x260?text=No+Poster'}">
+            <img src="${getProxyUrl(m.poster) || 'https://via.placeholder.com/180x260?text=No+Poster'}">
             <div class="card-info" style="height: 125px;">
                 <div class="card-top-content">
                     <h3 style="margin: 0 0 8px 0; font-size: 0.8rem; line-height: 1.2; min-height: 2.4em; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; text-overflow: ellipsis;">${m.title}</h3>
@@ -1096,7 +1096,7 @@ function openCollectionModal(cName, cMovies) {
     // Амбилайт для коллекции
     const ambilight = document.getElementById('collection-ambilight');
     if (ambilight && cMovies.length > 0) {
-        ambilight.style.backgroundImage = `url('${cMovies[0].poster}')`;
+        ambilight.style.backgroundImage = `url('${getProxyUrl(cMovies[0].poster)}')`;
         setTimeout(() => ambilight.style.opacity = '1', 50);
     }
 
