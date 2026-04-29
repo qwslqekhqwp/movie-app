@@ -1197,5 +1197,5 @@ window.openMobileProfileTab = function() {
     // 3. Открываем профиль, но вешаем на него маскировочный класс "is-tab"
     const modal = document.getElementById('profile-modal');
     modal.classList.add('is-tab');
-    openProfileModal('me'); // Загружаем твои данные
+    openProfileModal(currentRole); // Загружаем данные текущего пользователя
 };
