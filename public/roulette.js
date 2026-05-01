@@ -176,40 +176,35 @@ function renderSectors(ctx, centerX, centerY, radius, sliceAngle, angleOffset, o
         ctx.lineWidth = 1;
         ctx.stroke();
 
-        // === ОПТИМИЗАЦИЯ ТЕКСТА ===
+        // === ОПТИМИЗАЦИЯ ТЕКСТА УБРАНА ===
         let normMid = midAngle % (Math.PI * 2);
         if (normMid < 0) normMid += Math.PI * 2;
         
-        // Если фильмов больше 60, рисуем текст ТОЛЬКО на правой стороне, чтобы не грузить ПК
-        const isRightSide = normMid < Math.PI / 1.5 || normMid > (Math.PI * 1.3);
-        
-        if (currentRouletteMovies.length < 60 || isRightSide) {
-            ctx.save();
-            ctx.translate(centerX, centerY);
+        ctx.save();
+        ctx.translate(centerX, centerY);
             
-            // Анимация выбывания
-            if (eliminationAnim.active && i === eliminationAnim.index) {
-                ctx.translate(eliminationAnim.progress * 250, 0); 
-            }
-            
-            ctx.rotate(midAngle);
-            ctx.textAlign = "right";
-
-            const isActive = (i === closestIndex) && (minDistance < 0.2);
-
-            if (isActive) {
-                // УБРАЛИ shadowBlur (убийца FPS). Делаем текст чисто белым и жирным
-                ctx.fillStyle = `rgba(255, 255, 255, ${currentOpacity})`;
-                ctx.font = `900 ${Math.max(14, radius / 18)}px 'Segoe UI', sans-serif`;
-            } else {
-                ctx.fillStyle = `rgba(140, 140, 140, ${currentOpacity})`;
-                ctx.font = `500 ${Math.max(11, radius / 26)}px 'Segoe UI', sans-serif`;
-            }
-
-            const shortTitle = movie.title.length > 22 ? movie.title.substring(0, 19) + '...' : movie.title;
-            ctx.fillText(shortTitle, radius - 35, 5);
-            ctx.restore();
+        // Анимация выбывания
+        if (eliminationAnim.active && i === eliminationAnim.index) {
+            ctx.translate(eliminationAnim.progress * 250, 0); 
         }
+            
+        ctx.rotate(midAngle);
+        ctx.textAlign = "right";
+
+        const isActive = (i === closestIndex) && (minDistance < 0.2);
+
+        if (isActive) {
+            // УБРАЛИ shadowBlur (убийца FPS). Делаем текст чисто белым и жирным
+            ctx.fillStyle = `rgba(255, 255, 255, ${currentOpacity})`;
+            ctx.font = `900 ${Math.max(14, radius / 18)}px 'Segoe UI', sans-serif`;
+        } else {
+            ctx.fillStyle = `rgba(140, 140, 140, ${currentOpacity})`;
+            ctx.font = `500 ${Math.max(11, radius / 26)}px 'Segoe UI', sans-serif`;
+        }
+
+        const shortTitle = movie.title.length > 22 ? movie.title.substring(0, 19) + '...' : movie.title;
+        ctx.fillText(shortTitle, radius - 35, 5);
+        ctx.restore();
     });
 
     // Дырка в центре
