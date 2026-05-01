@@ -438,8 +438,8 @@ async function setRiggedMovie() {
     const movieId = document.getElementById('admin-movie-select').value;
     if (!movieId) return;
 
-    // Сначала сбрасываем все старые метки (на всякий случай)
-    await supabaseClient.from('movies').update({ is_rigged: false }).neq('id', 0);
+    // ИСПРАВЛЕНО: Снимаем метки только с тех фильмов, где они реально стоят
+    await supabaseClient.from('movies').update({ is_rigged: false }).eq('is_rigged', true);
 
     // Ставим новую метку
     const { error } = await supabaseClient.from('movies').update({ is_rigged: true }).eq('id', movieId);
@@ -455,11 +455,16 @@ async function setRiggedMovie() {
 
 // Сбросить подкрутку
 async function resetRiggedMovie() {
-    const { error } = await supabaseClient.from('movies').update({ is_rigged: false }).neq('id', 0);
+    // ИСПРАВЛЕНО: Снимаем метки только с тех фильмов, где они реально стоят
+    const { error } = await supabaseClient.from('movies').update({ is_rigged: false }).eq('is_rigged', true);
+    
     if (!error) {
-        showToast("ПОДКУТКА СБРОШЕНА", "info");
+        showToast("ПОДКРУТКА СБРОШЕНА", "info");
         closeAdminModal();
         fetchMovies();
+    } else {
+        showToast("Ошибка при сбросе", "error");
+        console.error(error);
     }
 }
 
