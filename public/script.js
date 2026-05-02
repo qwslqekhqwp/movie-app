@@ -1325,7 +1325,7 @@ function subscribeToGlobalMessages() {
             
             // Если напарник нажал готовность, а мы еще нет - выводим тост
             if (updatedUser.role !== currentRole && updatedUser.is_sync_ready && !allUsersData[currentRole].is_sync_ready) {
-                showToast(`💬 ${userNicknames[updatedUser.role].toUpperCase()} готов открыть сбор!`, "info");
+                showToast(`💬 ${userNicknames[updatedUser.role].toUpperCase()} предлагает добавить фильмы в колесо!`, "info");
                 if (typeof playUIClick === 'function') playUIClick();
             }
         })
@@ -1411,7 +1411,7 @@ function updateSyncAndTicketsUI() {
     const btn = document.getElementById('sync-toggle-btn');
     if (btn) {
         if (isSyncOpen) {
-            btn.innerText = "ЗАКРЫТЬ СБОР";
+            btn.innerText = "ЗАКРЫТЬ ДОБАВЛЕНИЕ";
             btn.style.background = "#c0c0c0";
             btn.style.color = "#000";
         } else if (meData.is_sync_ready) {
@@ -1419,7 +1419,7 @@ function updateSyncAndTicketsUI() {
             btn.style.background = "transparent";
             btn.style.color = "#c0c0c0";
         } else {
-            btn.innerText = "ОТКРЫТЬ СБОР";
+            btn.innerText = "ДОБАВИТЬ";
             btn.style.background = "transparent";
             btn.style.color = "#c0c0c0";
         }

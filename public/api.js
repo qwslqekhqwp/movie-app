@@ -14,7 +14,7 @@ async function fetchMovies() {
         // 1. Сначала скачиваем ники и аватарки обоих пользователей
         const { data: users, error: userError } = await supabaseClient
             .from('users')
-            .select('role, nickname, avatar_url'); 
+            .select('role, nickname, avatar_url, tickets, is_sync_ready'); 
 
        if (!userError && users) {
             users.forEach(u => {
