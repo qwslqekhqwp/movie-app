@@ -407,35 +407,65 @@ function finalizeSpin() {
 }
 
 /**
- * Добавляет или удаляет фильм из рулетки (в базе)
+ * Добавляет или удаляет фильм из рулетки (в базе) с учетом квот (Билетов)
  */
 async function toggleRouletteDirectly(id, isModalOpen = false) {
     const movie = allMovies.find(m => m.id == id);
     if (!movie) return;
 
     let newStatus;
-    let updateData = {}; // Объект с данными, которые полетят в базу
+    let updateData = {}; 
 
     if (movie.status === 'В колесе') {
-        // === УБИРАЕМ ИЗ РУЛЕТКИ ===
-        // 1. Смотрим в "кармашек" базы. 
-        // 2. Если там пусто (например, для старых фильмов), используем старую проверку как запасной план
+        // === УБИРАЕМ ИЗ РУЛЕТКИ (ЭТО БЕСПЛАТНО) ===
         const hasScores = (
             Number(movie.plot_me||0) + Number(movie.ending_me||0) + Number(movie.actors_me||0) + 
             Number(movie.plot_any||0) + Number(movie.ending_any||0) + Number(movie.actors_any||0)
         ) > 0;
         
         newStatus = movie.previous_status || (hasScores ? 'На пересмотр' : 'Не просмотрено');
-        
-        // Отправляем новый статус, а кармашек очищаем (он нам больше не нужен)
         updateData = { status: newStatus, previous_status: null };
     } else {
-        // === ДОБАВЛЯЕМ В РУЛЕТКУ ===
+        // === ДОБАВЛЯЕМ В РУЛЕТКУ (ПРОВЕРКА СБОРА И БИЛЕТОВ) ===
+        
+        // Проверяем, существует ли флаг и закрыт ли сбор
+        if (typeof isSyncOpen !== 'undefined' && !isSyncOpen) {
+            
+            // 1. Если билетов 0 — жесткий отказ
+            if (myTickets <= 0) {
+                showToast("ЛИМИТ ИСЧЕРПАН", "warning");
+                return; // Останавливаем выполнение
+            }
+            
+            // 2. Если билеты есть — спрашиваем разрешения
+            if (!confirm("Сейчас нельзя добавлять фильмы. Потратить 1 слот добавления вне очереди?")) {
+                return; // Пользователь передумал, останавливаем
+            }
+            
+            // 3. Списываем билет в базе данных
+            const { error: ticketError } = await supabaseClient
+                .from('users')
+                .update({ tickets: myTickets - 1 })
+                .eq('role', currentRole);
+                
+            if (ticketError) {
+                showToast("ОШИБКА СНЯТИЯ СЛОТА", "error");
+                return;
+            }
+            
+            // 4. Обновляем билеты в интерфейсе локально
+            myTickets--;
+            if (allUsersData && allUsersData[currentRole]) {
+                allUsersData[currentRole].tickets = myTickets;
+            }
+            if (typeof updateSyncAndTicketsUI === 'function') updateSyncAndTicketsUI();
+        }
+
         newStatus = 'В колесе';
-        // Перед тем как перевести в колесо, аккуратно записываем текущий статус в кармашек
         updateData = { status: newStatus, previous_status: movie.status };
     }
 
+    // === ОБНОВЛЕНИЕ ФИЛЬМА В БАЗЕ ===
     const { error } = await supabaseClient
         .from('movies')
         .update(updateData)
@@ -447,11 +477,11 @@ async function toggleRouletteDirectly(id, isModalOpen = false) {
         return;
     }
 
-    // Обновляем данные локально в браузере, чтобы не ждать перезагрузки
+    // Обновляем данные локально
     movie.status = newStatus;
     movie.previous_status = updateData.previous_status;
     
-    // === ЛОГ В ЛЕНТУ АКТИВНОСТИ ===
+    // Лог в ленту активности
     if (typeof logActivity === 'function') {
         const actionText = newStatus === 'В колесе' ? "Добавил фильм в рулетку ♤" : "Убрал фильм из рулетки ✕";
         logActivity(movie.title, actionText);
@@ -461,11 +491,11 @@ async function toggleRouletteDirectly(id, isModalOpen = false) {
 
     // Обновляем интерфейс
     if (isModalOpen) {
-        renderModalContent(movie);
+        if (typeof renderModalContent === 'function') renderModalContent(movie);
     } 
     if (typeof applyFilters === "function") applyFilters();
     if (document.getElementById('roulette-screen').style.display === 'block') {
-        initRoulette();
+        if (typeof initRoulette === 'function') initRoulette();
     }
 }
 

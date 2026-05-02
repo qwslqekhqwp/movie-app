@@ -16,7 +16,7 @@ async function fetchMovies() {
             .from('users')
             .select('role, nickname, avatar_url'); 
 
-        if (!userError && users) {
+       if (!userError && users) {
             users.forEach(u => {
                 userNicknames[u.role] = u.nickname;
                 allUsersData[u.role] = u; 
@@ -27,6 +27,16 @@ async function fetchMovies() {
             
             if (optMe) optMe.textContent = `Оценил ${userNicknames.me}`;
             if (optAny) optAny.textContent = `Оценил ${userNicknames.any}`;
+
+            // --- НОВОЕ: ЖЕСТКО ОБНОВЛЯЕМ НИКИ В ПАНЕЛИ СИНХРОНИЗАЦИИ ---
+            const syncNameMe = document.getElementById('sync-name-me');
+            const syncNameAny = document.getElementById('sync-name-any');
+            
+            if (syncNameMe) syncNameMe.innerText = userNicknames.me.toUpperCase();
+            if (syncNameAny) syncNameAny.innerText = userNicknames.any.toUpperCase();
+            
+            // --- НОВОЕ: Загружаем билеты и статусы сбора ---
+            if (typeof updateSyncAndTicketsUI === 'function') updateSyncAndTicketsUI();
         }
 
         // 2. === МАГИЯ ПРЕЛОАДЕРА И ЗАГРУЗКИ БАЗЫ ===

@@ -850,6 +850,18 @@ function updateUserProfileUI() {
     
     if (crown) crown.style.display = (currentRole === 'me') ? 'block' : 'none';
     if (mobileCrown) mobileCrown.style.display = (currentRole === 'me') ? 'flex' : 'none';
+
+    // --- Показываем панель и билеты (если это не гость) ---
+    const syncPanel = document.getElementById('sync-panel');
+    const navTickets = document.getElementById('nav-tickets');
+    
+    if (currentRole !== 'guest') {
+        if (syncPanel) syncPanel.style.display = 'flex';
+        if (navTickets) navTickets.style.display = 'flex';
+    } else {
+        if (syncPanel) syncPanel.style.display = 'none';
+        if (navTickets) navTickets.style.display = 'none';
+    }
 }
 
 
@@ -1297,6 +1309,27 @@ function subscribeToGlobalMessages() {
             }
         })
         .subscribe();
+    
+    // --- НОВОЕ: Слушаем изменения статуса сбора и билетов у друга ---
+    supabaseClient
+        .channel('public:users_sync')
+        .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'users' }, payload => {
+            const updatedUser = payload.new;
+            // Обновляем данные в памяти
+            if (allUsersData[updatedUser.role]) {
+                allUsersData[updatedUser.role] = updatedUser;
+            }
+            
+            // Перерисовываем наши точки
+            if (typeof updateSyncAndTicketsUI === 'function') updateSyncAndTicketsUI();
+            
+            // Если напарник нажал готовность, а мы еще нет - выводим тост
+            if (updatedUser.role !== currentRole && updatedUser.is_sync_ready && !allUsersData[currentRole].is_sync_ready) {
+                showToast(`💬 ${userNicknames[updatedUser.role].toUpperCase()} готов открыть сбор!`, "info");
+                if (typeof playUIClick === 'function') playUIClick();
+            }
+        })
+        .subscribe();
 }
 
 // ==========================================
@@ -1345,4 +1378,131 @@ async function toggleShadowban(id, isBanned) {
         // Перерисовываем список, чтобы применилось зачеркивание текста
         renderAdminShadowbanList(); 
     }
+}
+
+// ==========================================
+// ЛОГИКА СИНХРОНИЗАЦИИ И БИЛЕТОВ
+// ==========================================
+
+let isSyncOpen = false; // Глобальный флаг состояния сбора
+let myTickets = 3;      // Текущее количество моих билетов
+
+// Функция обновления визуала панели и билетов
+function updateSyncAndTicketsUI() {
+    if (currentRole === 'guest' || !allUsersData.me || !allUsersData.any) return;
+
+    const meData = allUsersData[currentRole];
+    const friendRole = currentRole === 'me' ? 'any' : 'me';
+    const friendData = allUsersData[friendRole];
+
+    myTickets = meData.tickets || 0;
+    
+    // 1. Обновляем точки в панели сбора
+    const dotMe = document.getElementById('sync-dot-me');
+    const dotAny = document.getElementById('sync-dot-any');
+    
+    if (dotMe) meData.is_sync_ready ? dotMe.classList.add('ready') : dotMe.classList.remove('ready');
+    if (dotAny) friendData.is_sync_ready ? dotAny.classList.add('ready') : dotAny.classList.remove('ready');
+
+    // 2. Проверяем общий статус (Открыт ли сбор?)
+    isSyncOpen = meData.is_sync_ready && friendData.is_sync_ready;
+
+    // 3. Красим кнопку в зависимости от статуса
+    const btn = document.getElementById('sync-toggle-btn');
+    if (btn) {
+        if (isSyncOpen) {
+            btn.innerText = "ЗАКРЫТЬ СБОР";
+            btn.style.background = "#c0c0c0";
+            btn.style.color = "#000";
+        } else if (meData.is_sync_ready) {
+            btn.innerText = "ОТМЕНИТЬ ГОТОВНОСТЬ";
+            btn.style.background = "transparent";
+            btn.style.color = "#c0c0c0";
+        } else {
+            btn.innerText = "ОТКРЫТЬ СБОР";
+            btn.style.background = "transparent";
+            btn.style.color = "#c0c0c0";
+        }
+    }
+
+    // 4. Зажигаем билеты в шапке
+    for (let i = 1; i <= 3; i++) {
+        const t = document.getElementById('ticket-' + i);
+        if (t) {
+            if (i <= myTickets) t.classList.add('active');
+            else t.classList.remove('active');
+        }
+    }
+}
+
+// Обработчик нажатия на кнопку "Открыть/Закрыть сбор"
+async function toggleSyncStatus() {
+    if (currentRole === 'guest') return;
+    
+    const meData = allUsersData[currentRole];
+    const newState = !meData.is_sync_ready; // Инвертируем текущий статус
+    
+    const btn = document.getElementById('sync-toggle-btn');
+    btn.innerText = "...";
+    btn.disabled = true;
+
+    const { error } = await supabaseClient
+        .from('users')
+        .update({ is_sync_ready: newState })
+        .eq('role', currentRole);
+
+    if (!error) {
+        meData.is_sync_ready = newState;
+        updateSyncAndTicketsUI(); // Перерисовываем интерфейс
+        
+        if (newState) {
+            // Если мы нажали готовность, а друг уже был готов
+            if (allUsersData[currentRole === 'me' ? 'any' : 'me'].is_sync_ready) {
+                showToast("МОЖНО ДОБАВЛЯТЬ ФИЛЬМЫ! СЛОТЫ НЕ ТРАТЯТСЯ", "success");
+            } else {
+                showToast("ОЖИДАЕМ ДРУГОГО ПОЛЬЗОВАТЕЛЯ", "info");
+            }
+        } else {
+            showToast("ДОБАВЛЕНИЕ ЗАКРЫТО", "info");
+        }
+    } else {
+        showToast("ОШИБКА СЕТИ", "error");
+    }
+    
+    btn.disabled = false;
+}
+
+// Функция сброса билетов (Только для УМНОГО)
+async function resetAllTickets() {
+    if (currentRole !== 'me') return;
+
+    const btn = document.querySelector('button[onclick="resetAllTickets()"]');
+    const oldText = btn.innerText;
+    btn.innerText = "...";
+    btn.disabled = true;
+
+    // Обновляем билеты сразу обоим пользователям
+    const { error } = await supabaseClient
+        .from('users')
+        .update({ tickets: 3 })
+        .in('role', ['me', 'any']);
+
+    if (!error) {
+        showToast("БИЛЕТЫ УСПЕШНО ВОССТАНОВЛЕНЫ", "success");
+        // Локальные данные друга обновятся сами через WebSockets, но мы обновим свои сразу
+        if (allUsersData.me) allUsersData.me.tickets = 3;
+        if (allUsersData.any) allUsersData.any.tickets = 3;
+        
+        // Принудительно отжимаем кнопку готовности у обоих (начинаем новый сбор с чистого листа)
+        await supabaseClient.from('users').update({ is_sync_ready: false }).in('role', ['me', 'any']);
+        if (allUsersData.me) allUsersData.me.is_sync_ready = false;
+        if (allUsersData.any) allUsersData.any.is_sync_ready = false;
+
+        updateSyncAndTicketsUI();
+    } else {
+        showToast("ОШИБКА СБРОСА", "error");
+    }
+
+    btn.innerText = oldText;
+    btn.disabled = false;
 }

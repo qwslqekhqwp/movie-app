@@ -1828,6 +1828,37 @@ input[type="range"]::-webkit-slider-thumb {
     filter: drop-shadow(0 0 8px rgba(192, 192, 192, 0.3));
 }
 
+/* --- Анимация букв и скрытого послания --- */
+.radar-letter {
+    fill: #888; /* Благородный темно-серый, чтобы не перебивать линию */
+    font-size: 14px;
+    font-weight: 700;
+    font-family: 'Segoe UI', sans-serif;
+    opacity: 0;
+    animation: fadeLetterIn 0.3s ease forwards;
+}
+
+.radar-center-text {
+    fill: #c0c0c0; /* Акцентное чистое серебро */
+    font-size: 26px;
+    font-weight: 900;
+    font-family: 'Segoe UI', sans-serif;
+    letter-spacing: 2px;
+    opacity: 0;
+    /* Стартует ровно через 1.5 сек, когда начинается заливка многоугольника */
+    animation: fadeCenterIn 0.8s ease 1.5s forwards; 
+    filter: drop-shadow(0 0 10px rgba(192, 192, 192, 0.4));
+}
+
+@keyframes fadeLetterIn {
+    to { opacity: 1; }
+}
+
+@keyframes fadeCenterIn {
+    0% { opacity: 0; transform: scale(0.8); transform-origin: center; }
+    100% { opacity: 1; transform: scale(1); transform-origin: center; }
+}
+
 /* Ключевые кадры */
 @keyframes fadeInAxes {
     to { opacity: 1; }
@@ -1950,4 +1981,35 @@ input[type="range"]::-webkit-slider-thumb {
         font-weight: bold;
         text-align: left;
     }
+}
+
+/* --- Индикаторы Билетов и Синхронизации --- */
+.ticket-dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: #111;
+    border: 1px solid #333;
+    transition: all 0.3s ease;
+}
+
+.ticket-dot.active {
+    background: #c0c0c0;
+    border-color: #c0c0c0;
+    box-shadow: 0 0 8px rgba(192, 192, 192, 0.6);
+}
+
+.sync-dot {
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    background: #111;
+    border: 1px solid #333;
+    transition: all 0.4s ease;
+}
+
+.sync-dot.ready {
+    background: #c0c0c0;
+    border-color: #c0c0c0;
+    box-shadow: 0 0 12px rgba(192, 192, 192, 0.8);
 }
