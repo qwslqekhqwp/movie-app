@@ -239,28 +239,55 @@ function spinRoulette() {
     const startAngle = wheelAngle;
     
     const sliceAngle = (2 * Math.PI) / currentRouletteMovies.length;
-    // === УМНАЯ ПОДКУТКА (Elimination mode) ===
+
+    // === УМНАЯ ПОДКРУТКА И ТЕНЕВОЙ БАН ===
     let winningIndex;
     const mode = document.getElementById('spin-mode').value;
     
     if (mode === 'elimination') {
-        // Ищем все фильмы, которые НЕ "заряжены"
-        const candidates = currentRouletteMovies
-            .map((m, index) => ({ ...m, originalIndex: index }))
-            .filter(m => !m.is_rigged);
+        // РЕЖИМ ВЫБЫВАНИЯ: Выбираем, кого ВЫКИНУТЬ с колеса
 
-        // Если есть другие кандидаты кроме "заряженного", выбираем из них
-        if (candidates.length > 0) {
-            const randomCandidate = candidates[Math.floor(Math.random() * candidates.length)];
-            winningIndex = randomCandidate.originalIndex;
+        // 1. Ищем фильмы в теневом бане (они - главные цели на уничтожение)
+        const shadowbannedTargets = currentRouletteMovies
+            .map((m, index) => ({ ...m, originalIndex: index }))
+            .filter(m => m.shadowbanned);
+
+        if (shadowbannedTargets.length > 0) {
+            // Безжалостно выкидываем один из забаненных фильмов
+            const target = shadowbannedTargets[Math.floor(Math.random() * shadowbannedTargets.length)];
+            winningIndex = target.originalIndex;
         } else {
-            // Если остался только один заряженный (финал), тогда он проигрывает (но этого не случится по логике)
-            winningIndex = Math.floor(Math.random() * currentRouletteMovies.length);
+            // 2. Если забаненных нет, честно выкидываем обычные фильмы (но не трогаем Заряженный)
+            const normalCandidates = currentRouletteMovies
+                .map((m, index) => ({ ...m, originalIndex: index }))
+                .filter(m => !m.is_rigged);
+
+            if (normalCandidates.length > 0) {
+                const randomCandidate = normalCandidates[Math.floor(Math.random() * normalCandidates.length)];
+                winningIndex = randomCandidate.originalIndex;
+            } else {
+                winningIndex = Math.floor(Math.random() * currentRouletteMovies.length);
+            }
         }
     } else {
-        // В обычном режиме просто ищем заряженный фильм и делаем его победителем сразу
+        // ОБЫЧНЫЙ РЕЖИМ: Выбираем ПОБЕДИТЕЛЯ
         const riggedIndex = currentRouletteMovies.findIndex(m => m.is_rigged);
-        winningIndex = riggedIndex !== -1 ? riggedIndex : Math.floor(Math.random() * currentRouletteMovies.length);
+        
+        if (riggedIndex !== -1) {
+            winningIndex = riggedIndex; // Сразу отдаем победу заряженному
+        } else {
+            // Если подкрутки нет, честно выбираем победителя из числа НЕ забаненных
+            const candidates = currentRouletteMovies
+                .map((m, index) => ({ ...m, originalIndex: index }))
+                .filter(m => !m.shadowbanned);
+                
+            if (candidates.length > 0) {
+                const randomCandidate = candidates[Math.floor(Math.random() * candidates.length)];
+                winningIndex = randomCandidate.originalIndex;
+            } else {
+                winningIndex = Math.floor(Math.random() * currentRouletteMovies.length);
+            }
+        }
     }
 
     let idealRemainder = (2 * Math.PI - (winningIndex * sliceAngle + sliceAngle / 2)) % (2 * Math.PI);

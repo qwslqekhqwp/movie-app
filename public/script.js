@@ -42,6 +42,9 @@ async function checkAuth() {
         document.getElementById('auth-screen').style.display = 'none';
         updateUserProfileUI(); 
         fetchMovies(); 
+
+        if (typeof subscribeToGlobalMessages === 'function') subscribeToGlobalMessages();
+
     } else {
         document.getElementById('auth-screen').style.display = 'flex';
     }
@@ -118,6 +121,7 @@ async function login() {
         showToast(`ДОБРО ПОЖАЛОВАТЬ, ${currentUserData.nickname.toUpperCase()}!`, "success");
         
         await fetchMovies(); 
+        if (typeof subscribeToGlobalMessages === 'function') subscribeToGlobalMessages();
 
     } catch (err) {
         console.error("Ошибка входа:", err);
@@ -1142,6 +1146,9 @@ function openAdminModal() {
         select.innerHTML += `<option value="${m.id}">${m.title}${isRigged}</option>`;
     });
 
+    // === НОВАЯ СТРОЧКА: Рисуем список теневого бана ===
+    if (typeof renderAdminShadowbanList === 'function') renderAdminShadowbanList();
+
     document.getElementById('admin-modal').style.display = 'block';
 }
 
@@ -1236,3 +1243,106 @@ window.openMobileProfileTab = function() {
     modal.classList.add('is-tab');
     openProfileModal(currentRole); // Загружаем данные текущего пользователя
 };
+
+// ==========================================
+// ГЛОБАЛЬНЫЕ ПОСЛАНИЯ (REAL-TIME)
+// ==========================================
+
+// 1. Функция ОТПРАВКИ сообщения (Вызывается кнопкой в админке)
+async function sendGlobalMessage() {
+    const input = document.getElementById('admin-message-input');
+    const text = input.value.trim();
+    
+    if (!text) return;
+    
+    // Блокируем кнопку на пару секунд, чтобы не спамить
+    const btn = input.nextElementSibling;
+    const oldText = btn.innerText;
+    btn.innerText = '...';
+    btn.disabled = true;
+
+    // Отправляем в базу
+    const { error } = await supabaseClient
+        .from('global_messages')
+        .insert([{ message: text, sender_role: currentRole }]);
+
+    if (error) {
+        showToast("Ошибка отправки", "error");
+        console.error(error);
+    } else {
+        input.value = ''; // Очищаем поле
+        showToast("Отправлено в эфир!", "success");
+    }
+    
+    btn.innerText = oldText;
+    btn.disabled = false;
+}
+
+// 2. Функция ПРОСЛУШИВАНИЯ эфира (Подключаем WebSockets)
+function subscribeToGlobalMessages() {
+    // Подписываемся на любые новые строчки (INSERT) в таблице global_messages
+    supabaseClient
+        .channel('public:global_messages')
+        .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'global_messages' }, payload => {
+            const newMessage = payload.new;
+            
+            // Если сообщение отправил не я сам, показываем Тост
+            if (newMessage.sender_role !== currentRole) {
+                // Добавляем эмодзи короны, чтобы друг знал, что пишет админ
+                const prefix = newMessage.sender_role === 'me' ? '👑 ' : '💬 ';
+                showToast(prefix + newMessage.message, "info");
+                
+                // Воспроизводим звук уведомления (если есть)
+                if (typeof playUIClick === 'function') playUIClick();
+            }
+        })
+        .subscribe();
+}
+
+// ==========================================
+// ТЕНЕВОЙ БАН В РУЛЕТКЕ
+// ==========================================
+
+function renderAdminShadowbanList() {
+    const list = document.getElementById('admin-shadowban-list');
+    if (!list) return;
+    list.innerHTML = '';
+    
+    const wheelMovies = allMovies.filter(m => m.status === 'В колесе');
+    
+    if (wheelMovies.length === 0) {
+        list.innerHTML = '<div style="color: #666; font-size: 0.7rem; text-align: center; margin-top: 10px;">Колесо пустое</div>';
+        return;
+    }
+
+    wheelMovies.forEach(m => {
+        const isChecked = m.shadowbanned ? 'checked' : '';
+        // Если фильм забанен, делаем его текст тусклым и зачеркнутым
+        const textStyle = m.shadowbanned ? 'color: #666; text-decoration: line-through;' : 'color: #fff;';
+        
+        list.innerHTML += `
+            <label style="display: flex; align-items: center; gap: 10px; margin-bottom: 10px; font-size: 0.8rem; cursor: pointer; padding: 5px; background: rgba(255,255,255,0.02); border-radius: 6px;">
+                <input type="checkbox" ${isChecked} onchange="toggleShadowban('${m.id}', this.checked)" style="width: 18px; height: 18px; margin: 0; cursor: pointer;">
+                <span style="${textStyle} flex: 1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">${m.title}</span>
+            </label>
+        `;
+    });
+}
+
+async function toggleShadowban(id, isBanned) {
+    const { error } = await supabaseClient
+        .from('movies')
+        .update({ shadowbanned: isBanned })
+        .eq('id', id);
+
+    if (error) {
+        showToast("Ошибка сохранения", "error");
+    } else {
+        // Обновляем данные локально без перезагрузки всей страницы
+        const movie = allMovies.find(m => m.id == id);
+        if (movie) movie.shadowbanned = isBanned;
+        
+        // Перерисовываем список, чтобы применилось зачеркивание текста
+        renderAdminShadowbanList(); 
+    }
+}

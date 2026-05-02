@@ -403,7 +403,7 @@
             </div>
         </div>
         <div style="text-align:center; margin-top:30px; margin-bottom:10px; color:#444; font-size:0.5rem; letter-spacing:3px;">
-                version 7.2.0
+                version 8.0.0
         </div>
     </div>
 
@@ -475,6 +475,23 @@
                 
                 <button onclick="setRiggedMovie()" class="save-btn" style="background: #1a1a1a; color: #fff; border: 1px solid #c0c0c0; margin-bottom: 10px;">ЗАРЯДИТЬ ПОБЕДУ</button>
                 <button onclick="resetRiggedMovie()" style="background: none; border: none; color: #444; width: 100%; cursor: pointer; font-size: 0.65rem; text-transform: uppercase; letter-spacing: 1px;">Сбросить подкрутку</button>
+            </div>
+
+            <!-- НОВЫЙ БЛОК: Теневой бан -->
+            <div style="margin-top: 25px; border-top: 1px solid #333; padding-top: 20px;">
+                <p style="font-size: 0.65rem; color: #555; text-transform: uppercase; margin-bottom: 10px;">ТЕНЕВОЙ БАН (Исключить из победы):</p>
+                <div id="admin-shadowban-list" style="max-height: 140px; overflow-y: auto; background: #111; border: 1px solid #222; border-radius: 8px; padding: 10px;">
+                    <!-- Сюда скрипт вставит чекбоксы -->
+                </div>
+            </div>
+
+            <!-- НОВЫЙ БЛОК: Глобальные послания -->
+            <div style="margin-top: 25px; border-top: 1px solid #333; padding-top: 20px;">
+                <p style="font-size: 0.65rem; color: #555; text-transform: uppercase; margin-bottom: 10px;">Глобальное послание:</p>
+                <div style="display: flex; gap: 10px;">
+                    <input type="text" id="admin-message-input" placeholder="Текст сообщения..." style="margin-bottom: 0;">
+                    <button onclick="sendGlobalMessage()" class="save-btn" style="width: auto; padding: 0 15px; font-size: 0.7rem;">ОТПРАВИТЬ</button>
+                </div>
             </div>
         </div>
     </div>
